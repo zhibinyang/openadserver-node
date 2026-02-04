@@ -168,6 +168,28 @@ npx ts-node scripts/debug-db.ts
 
 ---
 
+## 🖥️ Web Admin Interface
+
+A Vue.js 3 based admin panel is included in `web-admin/` to manage advertisers, campaigns, and creatives.
+
+### Running the Admin Panel
+1.  Navigate to the directory:
+    ```bash
+    cd web-admin
+    ```
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+3.  Start the development server:
+    ```bash
+    npm run dev
+    ```
+4.  Open the browser at `http://localhost:5173`.
+5.  Ensure the NestJS backend is running on `http://localhost:3000` (CORS is enabled).
+
+---
+
 ## 📁 Project Structure
 
 ```

@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module';
 import { EngineModule } from './modules/engine/engine.module';
 import { RedisModule } from './shared/redis/redis.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TrackingModule } from './modules/tracking/tracking.module';
     RedisModule, // Global
     EngineModule,
     TrackingModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
