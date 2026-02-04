@@ -27,10 +27,11 @@ RUN npm install --only=production
 COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/drizzle ./drizzle
 COPY --from=builder /usr/src/app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /usr/src/app/docker-entrypoint.sh ./
 
 # Copy debug scripts if needed
 COPY --from=builder /usr/src/app/scripts ./scripts
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start:prod"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

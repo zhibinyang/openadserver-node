@@ -17,7 +17,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/ad/get"]
+      test: ["CMD", "wget", "--header=Content-Type: application/json", "--post-data={\"slot_id\":\"health_check_mock_id\"}", "-qO-", "http://localhost:3000/ad/get"]
       interval: 30s
       timeout: 10s
       retries: 3
