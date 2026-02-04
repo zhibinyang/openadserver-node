@@ -1,5 +1,5 @@
 
-import { IsString, IsNumberString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsNumberString, IsOptional, IsEnum, IsUUID } from 'class-validator';
 
 export enum TrackingType {
     IMP = 'imp',
@@ -12,11 +12,19 @@ export class TrackingDto {
     @IsEnum(TrackingType)
     type: TrackingType;
 
+    // Primary tracking method: click_id
+    @IsString()
+    @IsOptional()
+    click_id?: string;
+
+    // Legacy tracking fields (for backward compatibility)
     @IsNumberString()
-    cid: string; // Campaign ID
+    @IsOptional()
+    cid?: string; // Campaign ID
 
     @IsNumberString()
-    crid: string; // Creative ID
+    @IsOptional()
+    crid?: string; // Creative ID
 
     @IsString()
     @IsOptional()

@@ -9,6 +9,7 @@ import {
     text,
     boolean,
     json,
+    index,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { Status, BidType, CreativeType, EventType } from '../shared/types';
@@ -142,6 +143,7 @@ export const targetingRulesRelations = relations(targeting_rules, ({ one }) => (
 export const ad_events = pgTable('ad_events', {
     id: serial('id').primaryKey(),
     request_id: varchar('request_id', { length: 64 }).notNull(), // indexed in SQL
+    click_id: varchar('click_id', { length: 64 }), // Unique click identifier, indexed
 
     campaign_id: integer('campaign_id').references(() => campaigns.id),
     creative_id: integer('creative_id').references(() => creatives.id),
@@ -152,7 +154,10 @@ export const ad_events = pgTable('ad_events', {
     event_time: timestamp('event_time').notNull(),
 
     cost: numeric('cost', { precision: 12, scale: 6 }).default('0'),
-});
+}, (table) => ({
+    // Create index on click_id for fast lookups
+    clickIdIdx: index('ad_events_click_id_idx').on(table.click_id),
+}));
 
 export const ad_eventsRelations = relations(ad_events, ({ one }) => ({
     campaign: one(campaigns, {

@@ -70,6 +70,9 @@ export interface AdCandidate {
     width?: number;
     height?: number;
 
+    // Tracking ID (generated at response time)
+    click_id?: string;
+
     // Extra info
     metadata?: Record<string, any>;
 }

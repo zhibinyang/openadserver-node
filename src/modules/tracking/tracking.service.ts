@@ -18,14 +18,48 @@ export class TrackingService {
     ) { }
 
     async track(dto: TrackingDto): Promise<void> {
-        const campaignId = parseInt(dto.cid, 10);
-        const creativeId = parseInt(dto.crid, 10);
-        const userId = dto.uid;
+        let campaignId: number;
+        let creativeId: number;
+        let userId: string | undefined;
+        let requestId: string;
+        let clickId = dto.click_id;
+
+        // Try click_id-based tracking first (new method)
+        if (dto.click_id) {
+            const clickDataStr = await this.redisService.get(`click:${dto.click_id}`);
+
+            if (clickDataStr) {
+                const clickData = JSON.parse(clickDataStr);
+                campaignId = clickData.campaign_id;
+                creativeId = clickData.creative_id;
+                userId = clickData.user_id;
+                requestId = clickData.request_id;
+
+                this.logger.log(`Tracking via click_id: ${dto.click_id} for campaign ${campaignId}`);
+            } else {
+                this.logger.warn(`Click ID not found in Redis: ${dto.click_id}`);
+                return; // Skip tracking if click_id is invalid
+            }
+        }
+        // Fallback to legacy method (cid/crid)
+        else if (dto.cid && dto.crid) {
+            campaignId = parseInt(dto.cid, 10);
+            creativeId = parseInt(dto.crid, 10);
+            userId = dto.uid;
+            requestId = randomUUID(); // Generate new request_id for legacy tracking
+            clickId = undefined;
+
+            this.logger.log(`Tracking via legacy method: campaign ${campaignId}, creative ${creativeId}`);
+        } else {
+            this.logger.warn('Invalid tracking request: missing click_id or cid/crid');
+            return;
+        }
+
         const today = new Date().toISOString().split('T')[0];
 
         // 1. Determine Event Type & Cost
         let eventType = EventType.IMPRESSION;
-        let cost = 0; // Default cost to 0 unless specified or calculated
+        let cost = 0;
 
         if (dto.type === TrackingType.CLICK) eventType = EventType.CLICK;
         if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) {
@@ -34,9 +68,10 @@ export class TrackingService {
 
         if (dto.cost) cost = parseFloat(dto.cost);
 
-        // 2. Async Persist to DB (Fire & Forget for latency, strictly speaking should queue)
+        // 2. Persist to DB
         await this.db.insert(schema.ad_events).values({
-            request_id: randomUUID(), // In real app, pass from request
+            request_id: requestId,
+            click_id: clickId,
             campaign_id: campaignId,
             creative_id: creativeId,
             user_id: userId,
@@ -45,7 +80,7 @@ export class TrackingService {
             cost: cost.toString(),
         }).catch(e => this.logger.error('Failed to insert tracking event', e));
 
-        // 3. Update Redis Counters (Real-time Policy Enforcement)
+        // 3. Update Redis Counters
 
         // 3.1 Frequency Capping (Increments only on Impression)
         if (eventType === EventType.IMPRESSION && userId) {
@@ -58,9 +93,5 @@ export class TrackingService {
             const key = `budget:${campaignId}:${today}`;
             await this.redisService.hincrbyfloat(key, 'spent_today', cost);
         }
-
-        // 3.3 Stats (Impressions/Clicks)
-        // Keys: stats:campaign:{id}:{hour}
-        // Omitted for brevity, but same pattern as above
     }
 }
