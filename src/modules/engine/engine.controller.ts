@@ -3,10 +3,14 @@ import { Body, Controller, Post, HttpCode, HttpStatus } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
 import { UserContext } from '../../shared/types';
+import { MacroReplacer } from './services/macro-replacer.service';
 
 @Controller('ad')
 export class EngineController {
-    constructor(private readonly adEngine: AdEngine) { }
+    constructor(
+        private readonly adEngine: AdEngine,
+        private readonly macroReplacer: MacroReplacer,
+    ) { }
 
     @Post('get')
     @HttpCode(HttpStatus.OK)
@@ -31,23 +35,34 @@ export class EngineController {
 
         // Base URL for absolute tracking pixels
         const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+        const requestId = crypto.randomUUID();
 
         return {
-            request_id: crypto.randomUUID(),
-            candidates: candidates.slice(0, numAds).map(c => ({
-                // Expose only necessary fields to client
-                ad_id: `ad_${c.campaign_id}_${c.creative_id}`,
-                creative_id: c.creative_id,
-                campaign_id: c.campaign_id,
-                title: c.title,
-                description: c.description,
-                image_url: c.image_url,
-                video_url: c.video_url,
-                landing_url: c.landing_url,
-                imp_pixel: `${baseUrl}/track?type=imp&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
-                click_pixel: `${baseUrl}/track?type=click&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
-                conversion_pixel: `${baseUrl}/track?type=conversion&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
-            })),
+            request_id: requestId,
+            candidates: candidates.slice(0, numAds).map(c => {
+                // Apply macro replacement to landing URL
+                const landingUrl = this.macroReplacer.replace(c.landing_url, {
+                    requestId,
+                    candidate: c,
+                    userContext: context,
+                    timestamp: Date.now(),
+                });
+
+                return {
+                    // Expose only necessary fields to client
+                    ad_id: `ad_${c.campaign_id}_${c.creative_id}`,
+                    creative_id: c.creative_id,
+                    campaign_id: c.campaign_id,
+                    title: c.title,
+                    description: c.description,
+                    image_url: c.image_url,
+                    video_url: c.video_url,
+                    landing_url: landingUrl,
+                    imp_pixel: `${baseUrl}/track?type=imp&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
+                    click_pixel: `${baseUrl}/track?type=click&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
+                    conversion_pixel: `${baseUrl}/track?type=conversion&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
+                };
+            }),
         };
     }
 }

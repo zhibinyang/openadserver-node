@@ -4,6 +4,7 @@ import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../shared/redis/redis.module';
 import { CacheService } from './services/cache.service';
 import { TargetingMatcher } from './services/targeting.matcher';
+import { MacroReplacer } from './services/macro-replacer.service';
 import { RetrievalService } from './pipeline/1-retrieval.service';
 import { FilterService } from './pipeline/2-filter.service';
 import { PredictionService } from './pipeline/3-prediction.service';
@@ -21,6 +22,7 @@ import { EngineController } from './engine.controller';
     providers: [
         CacheService,
         TargetingMatcher,
+        MacroReplacer,
         // Pipeline Steps
         RetrievalService,
         FilterService,
