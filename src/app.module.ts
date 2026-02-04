@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { EngineModule } from './modules/engine/engine.module';
+import { RedisModule } from './shared/redis/redis.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { EngineModule } from './modules/engine/engine.module';
       isGlobal: true,
     }),
     DatabaseModule,
+    RedisModule, // Global
     EngineModule,
   ],
   controllers: [AppController],
