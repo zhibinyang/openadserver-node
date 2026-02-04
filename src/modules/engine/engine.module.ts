@@ -10,6 +10,7 @@ import { PredictionService } from './pipeline/3-prediction.service';
 import { RankingService } from './pipeline/4-ranking.service';
 import { RerankService } from './pipeline/5-rerank.service';
 import { AdEngine } from './ad-engine.service';
+import { EngineController } from './engine.controller';
 
 @Module({
     imports: [
@@ -29,6 +30,7 @@ import { AdEngine } from './ad-engine.service';
         // Engine
         AdEngine,
     ],
+    controllers: [EngineController],
     exports: [CacheService, AdEngine],
 })
 export class EngineModule { }

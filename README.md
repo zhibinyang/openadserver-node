@@ -1,98 +1,195 @@
+
 <p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
+  <img src="https://nestjs.com/img/logo-small.svg" alt="NestJS Logo" width="100"/>
+  <span style="font-size: 80px; vertical-align: middle; margin: 0 20px;">+</span>
+  <img src="docs/assets/logo.svg" alt="OpenAdServer" width="300" onerror="this.src='https://via.placeholder.com/300x80?text=OpenAdServer'"/>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+<!-- Note: For local development, if docs/assets/logo.svg is missing, it will fallback or break. Assuming relative path is maintained or similar logo used. -->
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+<h1 align="center">OpenAdServer (Node.js Edition)</h1>
+
+<p align="center">
+  <strong>High-Performance Ad Serving Engine built with NestJS & Fastify</strong><br>
+  <em>The next-generation, ultra-fast serving layer for OpenAdServer</em>
 </p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+<p align="center">
+  <a href="#-features">Features</a> •
+  <a href="#-architecture">Architecture</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-stack">Tech Stack</a>
+</p>
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+<p align="center">
+  <img src="https://img.shields.io/badge/node-%3E%3D20-green.svg" alt="Node.js 20+"/>
+  <img src="https://img.shields.io/badge/framework-NestJS-red.svg" alt="NestJS"/>
+  <img src="https://img.shields.io/badge/adapter-Fastify-black.svg" alt="Fastify"/>
+  <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"/>
+</p>
 
-## Project setup
+---
 
-```bash
-$ npm install
+## ⚡ Introduction
+
+**OpenAdServer Node** is a rewrite of the serving layer of OpenAdServer, migrated from Python (FastAPI) to **Node.js (NestJS + Fastify)**. 
+
+While the original Python version excels at Data Science and Model Training integrations, this Node.js version is engineered for **pure serving performance**, concurrency, and scalability. It maintains the exact same **5-step Recommendation Pipeline** logic but optimizes it for the V8 engine's asynchronous I/O capabilities.
+
+> **Note:** This project is strictly for the **Serving Engine**. Model training (DeepFM/LR) is still handled by the Python ecosystem, communicating via ONNX or shared storage/DB.
+
+## ✨ Features
+
+### 🚀 High-Performance Serving
+- **NestJS + Fastify**: Built on one of the fastest Node.js web frameworks, offering lower overhead than Express.
+- **Asynchronous Pipeline**: Fully non-blocking I/O for database and Redis lookups.
+- **In-Memory Caching**: Active campaigns and creatives are pre-loaded into hot memory (`Map`) for O(1) retrieval, eliminating DB hits during the critical path.
+
+### 🧠 The 5-Step Pipeline
+1.  **Retrieval**: Selects candidates based on Targeting Rules (Geo, OS, Device).
+2.  **Filter**: Enforces **Budget** (Redis) and **Frequency Capping** (Redis) in real-time.
+3.  **Prediction**: Integration point for CTR/CVR prediction (Statistical or ONNX).
+4.  **Ranking**: Calculates **eCPM** (Bid * pCTR * 1000) to maximize revenue.
+5.  **Rerank**: Improves result quality with Diversity rules (e.g., max 2 ads per advertiser).
+
+### 🛠 Modern Engineering
+- **TypeScript**: Full type safety from Database to API DTOs.
+- **Drizzle ORM**: Lightweight, SQL-like, type-safe database access.
+- **Modular Architecture**: Clean separation of concerns (Engine, Tracking, Shared resources).
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph LR
+    User[Client / Device] -->|POST /ad/get| API[Fastify Controller]
+    User -->|GET /track| Track[Tracking Controller]
+    
+    subgraph "Ad Engine (NestJS)"
+        API --> Engine[AdEngine Service]
+        Engine --> Step1[1. Retrieval]
+        Engine --> Step2[2. Filter]
+        Engine --> Step3[3. Prediction]
+        Engine --> Step4[4. Ranking]
+        Engine --> Step5[5. Rerank]
+        
+        Step1 --> Cache[In-Memory Cache]
+        Step2 --> Redis[Redis Checks]
+    end
+    
+    subgraph "Data Store"
+        Redis -->|Freq / Budget| RedisStore[(Redis)]
+        Cache -->|Refresh 1m| DB[(PostgreSQL)]
+        Track -->|Insert| DB
+        Track -->|Incr| RedisStore
+    end
 ```
 
-## Compile and run the project
+---
+
+## 🛠 Tech Stack
+
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| **Framework** | **NestJS** | Structured, scalable, enterprise-grade DI/Module system. |
+| **Web Adapter** | **Fastify** | High throughput, low overhead HTTP processing. |
+| **Language** | **TypeScript** | Type safety, reliability, and better developer experience. |
+| **Database ORM** | **Drizzle** | Best-in-class TypeScript ORM, no runtime overhead like TypeORM/Prisma. |
+| **Cache/KV** | **Redis (ioredis)** | Real-time counters for frequency capping and budgeting. |
+| **Database** | **PostgreSQL** | Relational data for campaigns, users, and reporting. |
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 20+
+- PostgreSQL
+- Redis
+
+### 1. Installation
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+git clone <repo-url>
+cd openadserver-node
+npm install
 ```
 
-## Run tests
+### 2. Environment Setup
+
+Create `.env` file:
+```bash
+cp .env.example .env
+```
+Edit `.env` and set your `DATABASE_URL` and `REDIS_HOST`.
+
+### 3. Database Initialization
+
+This command will:
+1.  Push the schema to your database (using `drizzle-kit push --force`).
+2.  Seed the database with test data (Advertisers, Campaigns, Creatives).
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run init:db
 ```
 
-## Deployment
+> **Note:** Ensure your `.env` points to a valid database (e.g., `postgres://user:password@localhost:5432/oas`).
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 4. Running the Server
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Development mode
+npm run start:dev
+
+# Production build
+npm run build
+npm run start:prod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### 5. Verification
 
-## Resources
+**Get an Ad:**
+```bash
+curl -X POST http://localhost:3000/ad/get \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slot_id": "home_banner",
+    "user_id": "test_user_1",
+    "os": "ios",
+    "country": "US"
+  }'
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+**Debug Database State:**
+```bash
+npx ts-node scripts/debug-db.ts
+```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## 📁 Project Structure
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```
+src/
+├── database/           # Drizzle schema & connection
+├── modules/
+│   ├── engine/         # Core Ad Serving Logic
+│   │   ├── pipeline/   # The 5 Steps (Retrieval...Rerank)
+│   │   ├── services/   # CacheService, TargetingMatcher
+│   │   └── dto/        # Request/Response DTOs
+│   └── tracking/       # Pixel & Event Tracking
+└── shared/
+    ├── redis/          # Redis Client wrapper
+    └── types.ts        # Shared Enums & Interfaces
+```
 
-## Stay in touch
+---
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## 🤝 Contributing
 
-## License
+This node version aims to keep parity with the main Python repo logic-wise unless specific performance optimizations dictate otherwise. Please match the Python implementation's intent when porting features.
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### License
+
+Apache License 2.0 (Same as original OpenAdServer)

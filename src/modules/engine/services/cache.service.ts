@@ -68,27 +68,29 @@ export class CacheService implements OnModuleInit {
 
             // Process Campaigns
             for (const campaign of campaignsData) {
-                newCampaigns.set(campaign.id, campaign);
+                newCampaigns.set(Number(campaign.id), campaign);
             }
 
             // Process Creatives
             for (const creative of creativesData) {
                 // Only add if campaign exists (ensure consistency)
-                if (newCampaigns.has(creative.campaign_id)) {
-                    if (!newCreatives.has(creative.campaign_id)) {
-                        newCreatives.set(creative.campaign_id, []);
+                const campaignId = Number(creative.campaign_id);
+                if (newCampaigns.has(campaignId)) {
+                    if (!newCreatives.has(campaignId)) {
+                        newCreatives.set(campaignId, []);
                     }
-                    newCreatives.get(creative.campaign_id)?.push(creative);
+                    newCreatives.get(campaignId)?.push(creative);
                 }
             }
 
             // Process Rules
             for (const rule of rulesData) {
-                if (newCampaigns.has(rule.campaign_id)) {
-                    if (!newRules.has(rule.campaign_id)) {
-                        newRules.set(rule.campaign_id, []);
+                const campaignId = Number(rule.campaign_id);
+                if (newCampaigns.has(campaignId)) {
+                    if (!newRules.has(campaignId)) {
+                        newRules.set(campaignId, []);
                     }
-                    newRules.get(rule.campaign_id)?.push(rule);
+                    newRules.get(campaignId)?.push(rule);
                 }
             }
 
@@ -96,7 +98,7 @@ export class CacheService implements OnModuleInit {
             this.campaigns = newCampaigns;
             this.creatives = newCreatives;
             this.rules = newRules;
-            this.allCreatives = creativesData.filter(c => newCampaigns.has(c.campaign_id));
+            this.allCreatives = creativesData.filter(c => newCampaigns.has(Number(c.campaign_id)));
 
             this.logger.log(
                 `Cache refreshed in ${Date.now() - start}ms. ` +
