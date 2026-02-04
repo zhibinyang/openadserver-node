@@ -64,20 +64,26 @@ export class EngineController {
                     app_id: context.app_id,
                 };
 
-                // Store in Redis with click_id as key
                 await this.redisService.set(
                     `click:${clickId}`,
                     JSON.stringify(clickData),
                     this.CLICK_ID_TTL
                 );
 
-                // Apply macro replacement to landing URL
-                const landingUrl = this.macroReplacer.replace(c.landing_url, {
+                // Step 1: Apply macro replacement to original landing URL
+                const originalLandingUrl = this.macroReplacer.replace(c.landing_url, {
                     requestId,
                     candidate: c,
                     userContext: context,
                     timestamp: Date.now(),
                 });
+
+                // Step 2: Construct internal URL (to) with click_id and UTM parameters
+                const urlSeparator = originalLandingUrl.includes('?') ? '&' : '?';
+                const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=cpc&utm_campaign=${c.campaign_id}`;
+
+                // Step 3: Construct external click-through URL
+                const landingUrl = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}`;
 
                 return {
                     ad_id: `ad_${c.campaign_id}_${c.creative_id}`,
@@ -89,9 +95,9 @@ export class EngineController {
                     video_url: c.video_url,
                     landing_url: landingUrl,
                     // Use click_id in tracking pixels
-                    imp_pixel: `${baseUrl}/track?click_id=${clickId}&type=imp`,
-                    click_pixel: `${baseUrl}/track?click_id=${clickId}&type=click`,
-                    conversion_pixel: `${baseUrl}/track?click_id=${clickId}&type=conversion`,
+                    imp_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp`,
+                    click_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=click`,
+                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion`,
                 };
             })
         );
