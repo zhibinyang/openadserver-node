@@ -170,4 +170,16 @@ export class AdminService {
             .where(eq(schema.targeting_rules.id, id))
             .returning();
     }
+
+    // --- Ad Events ---
+    async getAdEvents(limit: number = 100) {
+        return this.db.query.ad_events.findMany({
+            orderBy: [desc(schema.ad_events.event_time)],
+            limit,
+            with: {
+                campaign: true,
+                creative: true,
+            }
+        });
+    }
 }

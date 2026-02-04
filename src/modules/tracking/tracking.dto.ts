@@ -5,6 +5,7 @@ export enum TrackingType {
     IMP = 'imp',
     CLICK = 'click',
     CONV = 'conv',
+    CONVERSION = 'conversion', // Alias for CONV
 }
 
 export class TrackingDto {

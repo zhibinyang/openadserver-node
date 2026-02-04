@@ -28,7 +28,9 @@ export class TrackingService {
         let cost = 0; // Default cost to 0 unless specified or calculated
 
         if (dto.type === TrackingType.CLICK) eventType = EventType.CLICK;
-        if (dto.type === TrackingType.CONV) eventType = EventType.CONVERSION;
+        if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) {
+            eventType = EventType.CONVERSION;
+        }
 
         if (dto.cost) cost = parseFloat(dto.cost);
 

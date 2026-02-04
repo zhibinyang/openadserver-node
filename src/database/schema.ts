@@ -154,6 +154,17 @@ export const ad_events = pgTable('ad_events', {
     cost: numeric('cost', { precision: 12, scale: 6 }).default('0'),
 });
 
+export const ad_eventsRelations = relations(ad_events, ({ one }) => ({
+    campaign: one(campaigns, {
+        fields: [ad_events.campaign_id],
+        references: [campaigns.id],
+    }),
+    creative: one(creatives, {
+        fields: [ad_events.creative_id],
+        references: [creatives.id],
+    }),
+}));
+
 // --- HOURLY STATS ---
 export const hourly_stats = pgTable('hourly_stats', {
     id: serial('id').primaryKey(),

@@ -29,6 +29,9 @@ export class EngineController {
         const candidates = await this.adEngine.recommend(context, dto.slot_id);
         const numAds = Math.min(dto.num_ads || 1, 10); // Max 10 ads
 
+        // Base URL for absolute tracking pixels
+        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+
         return {
             request_id: crypto.randomUUID(),
             candidates: candidates.slice(0, numAds).map(c => ({
@@ -41,8 +44,9 @@ export class EngineController {
                 image_url: c.image_url,
                 video_url: c.video_url,
                 landing_url: c.landing_url,
-                imp_pixel: `/track?type=imp&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
-                click_pixel: `/track?type=click&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
+                imp_pixel: `${baseUrl}/track?type=imp&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
+                click_pixel: `${baseUrl}/track?type=click&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
+                conversion_pixel: `${baseUrl}/track?type=conversion&cid=${c.campaign_id}&crid=${c.creative_id}&uid=${dto.user_id || ''}`,
             })),
         };
     }

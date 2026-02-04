@@ -95,4 +95,11 @@ export class AdminController {
     deleteTargetingRule(@Param('id') id: string) {
         return this.adminService.deleteTargetingRule(Number(id));
     }
+
+    // --- Ad Events ---
+    @Get('events')
+    getAdEvents(@Query('limit') limit?: string) {
+        const limitNum = limit ? Math.min(Number(limit), 1000) : 100; // Default 100, max 1000
+        return this.adminService.getAdEvents(limitNum);
+    }
 }
