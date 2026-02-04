@@ -20,72 +20,115 @@ export class FilterService implements PipelineStep {
     ): Promise<AdCandidate[]> {
         if (candidates.length === 0) return [];
 
-        const validCandidates: AdCandidate[] = [];
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-        // Optimization: Check logical validatity + Batch Redis checks can be implemented here
-        // For MVP, we do sequential checks but optimized with pipeline if needed in future.
-        // Let's implement individual checks for clarity first.
+        // OPTIMIZATION 1: Batch Redis operations using pipeline
+        const budgetChecks = await this.batchCheckBudgets(candidates, today);
+        const freqChecks = await this.batchCheckFrequency(candidates, context.user_id);
 
-        for (const candidate of candidates) {
-            if (await this.isBudgetExhausted(candidate.campaign_id, today)) {
-                continue;
+        const validCandidates: AdCandidate[] = [];
+        for (let i = 0; i < candidates.length; i++) {
+            if (budgetChecks[i] || freqChecks[i]) {
+                continue; // Filtered out
             }
-
-            if (await this.isFrequencyCapped(candidate.campaign_id, context.user_id)) {
-                continue;
-            }
-
-            validCandidates.push(candidate);
+            validCandidates.push(candidates[i]);
         }
 
         return validCandidates;
     }
 
-    // --- Filter Logic ---
-
     /**
-     * Check if campaign budget is exhausted.
-     * Key: budget:{campaign_id}:{date} -> field: spent_today
+     * Batch check budgets for all candidates using Redis pipeline.
+     * Returns array of booleans indicating if each candidate is budget-exhausted.
      */
-    private async isBudgetExhausted(campaignId: number, date: string): Promise<boolean> {
-        const campaign = this.cacheService.getCampaign(campaignId);
-        if (!campaign || !campaign.budget_daily) return false; // No limit
+    private async batchCheckBudgets(candidates: AdCandidate[], date: string): Promise<boolean[]> {
+        const pipeline = this.redisService.client.pipeline();
+        const campaignLimits: number[] = [];
 
-        const dailyLimit = parseFloat(campaign.budget_daily);
-        if (dailyLimit <= 0) return false;
+        for (const candidate of candidates) {
+            const campaign = this.cacheService.getCampaign(candidate.campaign_id);
+            const limit = campaign?.budget_daily ? parseFloat(campaign.budget_daily) : 0;
+            campaignLimits.push(limit);
 
-        const key = `budget:${campaignId}:${date}`;
-        // We assume 'spent_today' is maintained by Tracking logic
-        const spentStr = await this.redisService.get(key); // Simplified k-v for now or hash
-        // The Python implementation used Hash: hget budget:... spent_today
-        // Let's stick to Python plan:
-        // HGET budget:{campaign_id}:{today} spent_today
-        const [spentToday] = await this.redisService.hmget(key, 'spent_today');
-
-        if (spentToday && parseFloat(spentToday) >= dailyLimit) {
-            return true;
+            if (limit > 0) {
+                const key = `budget:${candidate.campaign_id}:${date}`;
+                pipeline.hmget(key, 'spent_today');
+            } else {
+                pipeline.get('__dummy__'); // Placeholder to maintain index alignment
+            }
         }
-        return false;
+
+        const results = await pipeline.exec();
+        const exhausted: boolean[] = [];
+
+        for (let i = 0; i < candidates.length; i++) {
+            const limit = campaignLimits[i];
+            if (limit <= 0) {
+                exhausted.push(false);
+                continue;
+            }
+
+            const [err, value] = results![i];
+            if (err) {
+                this.logger.warn(`Redis error checking budget: ${err}`);
+                exhausted.push(false);
+                continue;
+            }
+
+            // value is from hmget, returns array of strings
+            const spentToday = (value as (string | null)[])?.[0];
+            exhausted.push(!!(spentToday && parseFloat(spentToday) >= limit));
+        }
+
+        return exhausted;
     }
 
     /**
-     * Check frequency cap.
-     * Key: freq:{user_id}:{campaign_id} (Simple counter with TTL)
+     * Batch check frequency caps for all candidates using Redis pipeline.
+     * Returns array of booleans indicating if each candidate is frequency-capped.
      */
-    private async isFrequencyCapped(campaignId: number, userId?: string): Promise<boolean> {
-        if (!userId) return false;
-
-        const campaign = this.cacheService.getCampaign(campaignId);
-        if (!campaign || !campaign.freq_cap_daily) return false;
-
-        const limit = campaign.freq_cap_daily;
-        const key = `freq:${userId}:${campaignId}`;
-        const countStr = await this.redisService.get(key);
-
-        if (countStr && parseInt(countStr, 10) >= limit) {
-            return true;
+    private async batchCheckFrequency(candidates: AdCandidate[], userId?: string): Promise<boolean[]> {
+        if (!userId) {
+            return new Array(candidates.length).fill(false);
         }
-        return false;
+
+        const pipeline = this.redisService.client.pipeline();
+        const campaignLimits: number[] = [];
+
+        for (const candidate of candidates) {
+            const campaign = this.cacheService.getCampaign(candidate.campaign_id);
+            const limit = campaign?.freq_cap_daily || 0;
+            campaignLimits.push(limit);
+
+            if (limit > 0) {
+                const key = `freq:${userId}:${candidate.campaign_id}`;
+                pipeline.get(key);
+            } else {
+                pipeline.get('__dummy__');
+            }
+        }
+
+        const results = await pipeline.exec();
+        const capped: boolean[] = [];
+
+        for (let i = 0; i < candidates.length; i++) {
+            const limit = campaignLimits[i];
+            if (limit <= 0) {
+                capped.push(false);
+                continue;
+            }
+
+            const [err, value] = results![i];
+            if (err) {
+                this.logger.warn(`Redis error checking frequency: ${err}`);
+                capped.push(false);
+                continue;
+            }
+
+            const count = value ? parseInt(value as string, 10) : 0;
+            capped.push(count >= limit);
+        }
+
+        return capped;
     }
 }

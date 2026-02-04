@@ -6,5 +6,5 @@ export interface PipelineStep {
         candidates: AdCandidate[],
         context: UserContext,
         extraArgs?: any,
-    ): Promise<AdCandidate[]>;
+    ): Promise<AdCandidate[]> | AdCandidate[]; // Support both sync and async
 }

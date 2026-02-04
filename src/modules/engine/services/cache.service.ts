@@ -23,6 +23,8 @@ export class CacheService implements OnModuleInit {
 
     // Fast access indices
     private allCreatives: CachedCreative[] = [];
+    // OPTIMIZATION 2: Indexed cache by slot_id for O(1) retrieval
+    private creativesBySlot: Map<string, CachedCreative[]> = new Map();
 
     constructor(
         @Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>,
@@ -100,6 +102,9 @@ export class CacheService implements OnModuleInit {
             this.rules = newRules;
             this.allCreatives = creativesData.filter(c => newCampaigns.has(Number(c.campaign_id)));
 
+            // OPTIMIZATION 2: Build slot_id index
+            this.buildSlotIndex();
+
             this.logger.log(
                 `Cache refreshed in ${Date.now() - start}ms. ` +
                 `Loaded: ${this.campaigns.size} campaigns, ${this.allCreatives.length} creatives, ${rulesData.length} rules.`
@@ -132,5 +137,26 @@ export class CacheService implements OnModuleInit {
 
     getAllCreatives(): CachedCreative[] {
         return this.allCreatives;
+    }
+
+    /**
+     * OPTIMIZATION 2: Get creatives by slot_id in O(1).
+     * Currently we don't have slot_id in schema, so returns all.
+     * When slot_id is added, this will provide indexed access.
+     */
+    getCreativesBySlot(slotId?: string): CachedCreative[] {
+        if (!slotId) return this.allCreatives;
+        return this.creativesBySlot.get(slotId) || this.allCreatives;
+    }
+
+    /**
+     * Build slot_id index during cache refresh.
+     * When slot_id column exists, group creatives by it.
+     */
+    private buildSlotIndex() {
+        // TODO: Group by slot_id when column exists
+        // For now, map all slots to all creatives as fallback
+        this.creativesBySlot.clear();
+        this.creativesBySlot.set('default', this.allCreatives);
     }
 }

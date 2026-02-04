@@ -9,10 +9,11 @@ export class PredictionService implements PipelineStep {
     private readonly DEFAULT_CTR = 0.015;
     private readonly DEFAULT_CVR = 0.005;
 
-    async execute(
+    // OPTIMIZATION 3: Removed async - pure synchronous computation
+    execute(
         candidates: AdCandidate[],
         _context: UserContext,
-    ): Promise<AdCandidate[]> {
+    ): AdCandidate[] {
         // In a real system, we would batch call ONNX Runtime here.
         // For now, we simulate Statistical Prediction.
 

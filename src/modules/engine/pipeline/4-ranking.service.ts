@@ -6,10 +6,11 @@ import { AdCandidate, UserContext, BidType } from '../../../shared/types';
 @Injectable()
 export class RankingService implements PipelineStep {
 
-    async execute(
+    // OPTIMIZATION 3: Removed async - pure synchronous computation
+    execute(
         candidates: AdCandidate[],
         _context: UserContext,
-    ): Promise<AdCandidate[]> {
+    ): AdCandidate[] {
 
         for (const candidate of candidates) {
             candidate.ecpm = this.calculateEcpm(candidate);

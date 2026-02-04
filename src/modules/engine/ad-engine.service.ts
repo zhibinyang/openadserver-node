@@ -37,11 +37,11 @@ export class AdEngine {
         candidates = await this.filterStep.execute(candidates, context);
         const countFilter = candidates.length;
 
-        // 3. Prediction
-        candidates = await this.predictionStep.execute(candidates, context);
+        // 3. Prediction (OPTIMIZATION 3: Pure sync, no await)
+        candidates = this.predictionStep.execute(candidates, context);
 
-        // 4. Ranking
-        candidates = await this.rankingStep.execute(candidates, context);
+        // 4. Ranking (OPTIMIZATION 3: Pure sync, no await)
+        candidates = this.rankingStep.execute(candidates, context);
 
         // 5. Rerank
         // Default limit 5 ads

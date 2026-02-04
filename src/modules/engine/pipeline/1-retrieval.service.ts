@@ -19,7 +19,8 @@ export class RetrievalService implements PipelineStep {
         context: UserContext,
         extraArgs?: { slot_id?: string },
     ): Promise<AdCandidate[]> {
-        const rawCreatives = this.cacheService.getAllCreatives();
+        // OPTIMIZATION 2: Use indexed cache for O(1) access by slot_id
+        const rawCreatives = this.cacheService.getCreativesBySlot(extraArgs?.slot_id);
         const result: AdCandidate[] = [];
 
         // Iterate all creatives (Naive linear scan for now - acceptable for thousands)
