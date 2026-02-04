@@ -27,10 +27,11 @@ export class EngineController {
         };
 
         const candidates = await this.adEngine.recommend(context, dto.slot_id);
+        const numAds = Math.min(dto.num_ads || 1, 10); // Max 10 ads
 
         return {
             request_id: crypto.randomUUID(),
-            candidates: candidates.map(c => ({
+            candidates: candidates.slice(0, numAds).map(c => ({
                 // Expose only necessary fields to client
                 ad_id: `ad_${c.campaign_id}_${c.creative_id}`,
                 creative_id: c.creative_id,

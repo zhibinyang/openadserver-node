@@ -50,4 +50,9 @@ export class AdRequestDto {
     @IsString({ each: true })
     @IsOptional()
     interests?: string[];
+
+    @IsNumber()
+    @IsOptional()
+    @Type(() => Number)
+    num_ads?: number = 1;
 }
