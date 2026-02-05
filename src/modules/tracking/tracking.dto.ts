@@ -6,6 +6,11 @@ export enum TrackingType {
     CLICK = 'click',
     CONV = 'conv',
     CONVERSION = 'conversion', // Alias for CONV
+    VIDEO_START = 'start',
+    VIDEO_FIRST_QUARTILE = 'firstQuartile',
+    VIDEO_MIDPOINT = 'midpoint',
+    VIDEO_THIRD_QUARTILE = 'thirdQuartile',
+    VIDEO_COMPLETE = 'complete',
 }
 
 export class TrackingDto {

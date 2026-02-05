@@ -5,6 +5,8 @@ import { RedisModule } from '../../shared/redis/redis.module';
 import { CacheService } from './services/cache.service';
 import { TargetingMatcher } from './services/targeting.matcher';
 import { MacroReplacer } from './services/macro-replacer.service';
+import { VastBuilder } from './services/vast-builder';
+import { JsonResponseBuilder, VastResponseBuilder, ResponseBuilderFactory } from './services/response-builder.service';
 import { RetrievalService } from './pipeline/1-retrieval.service';
 import { FilterService } from './pipeline/2-filter.service';
 import { PredictionService } from './pipeline/3-prediction.service';
@@ -23,6 +25,11 @@ import { EngineController } from './engine.controller';
         CacheService,
         TargetingMatcher,
         MacroReplacer,
+        // Response Builders
+        VastBuilder,
+        JsonResponseBuilder,
+        VastResponseBuilder,
+        ResponseBuilderFactory,
         // Pipeline Steps
         RetrievalService,
         FilterService,

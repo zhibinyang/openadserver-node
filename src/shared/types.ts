@@ -36,6 +36,11 @@ export enum EventType {
     IMPRESSION = 1,
     CLICK = 2,
     CONVERSION = 3,
+    VIDEO_START = 4,
+    VIDEO_FIRST_QUARTILE = 5,
+    VIDEO_MIDPOINT = 6,
+    VIDEO_THIRD_QUARTILE = 7,
+    VIDEO_COMPLETE = 8,
 }
 
 /**

@@ -91,6 +91,10 @@ export class CreateCreativeDto {
     @IsOptional()
     image_url?: string;
 
+    @IsString()
+    @IsOptional()
+    video_url?: string;
+
     @IsEnum(CreativeType)
     @IsOptional()
     @Type(() => Number)
@@ -160,8 +164,18 @@ export class UpdateCreativeDto {
     @IsString() @IsOptional() title?: string;
     @IsString() @IsOptional() description?: string;
     @IsString() @IsOptional() landing_url?: string;
-    @IsString() @IsOptional() image_url?: string;
-    @IsEnum(CreativeType) @IsOptional() @Type(() => Number) creative_type?: CreativeType;
+    @IsString()
+    @IsOptional()
+    image_url?: string;
+
+    @IsString()
+    @IsOptional()
+    video_url?: string;
+
+    @IsEnum(CreativeType)
+    @IsOptional()
+    @Type(() => Number)
+    creative_type?: CreativeType;
     @IsNumber() @IsOptional() @Type(() => Number) width?: number;
     @IsNumber() @IsOptional() @Type(() => Number) height?: number;
     @IsEnum(Status) @IsOptional() @Type(() => Number) status?: Status;
