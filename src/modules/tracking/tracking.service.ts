@@ -1,8 +1,5 @@
 
-import { Injectable, Logger, Inject } from '@nestjs/common';
-import { DRIZZLE } from '../../database/database.module';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import * as schema from '../../database/schema';
+import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '../../shared/redis/redis.service';
 import { TrackingDto, TrackingType } from './tracking.dto';
 import { EventType } from '../../shared/types';
@@ -14,7 +11,6 @@ export class TrackingService {
     private readonly logger = new Logger(TrackingService.name);
 
     constructor(
-        @Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>,
         private redisService: RedisService,
         private analyticsService: AnalyticsService,
     ) { }
@@ -26,21 +22,18 @@ export class TrackingService {
         let requestId: string;
         let clickId = dto.click_id;
 
-        // Context fields
         // Context fields - Now mostly empty for lightweight tracking
         let device: string | undefined;
         let browser: string | undefined;
-        let os: string | undefined;
         let country: string | undefined;
         let city: string | undefined;
-        let ip: string | undefined; // We could extract from request if passed to track()
-        let appId: string | undefined;
+        let ip: string | undefined;
         let bid = 0;
 
         // Try click_id-based tracking (lightweight)
         if (dto.click_id) {
             // We NO LONGER fetch context from Redis.
-            // We rely on BigQuery to join 'click_id' with the original 'REQUEST' event.
+            // We rely on DB to join 'click_id' with the original 'REQUEST' event.
             campaignId = 0; // Unknown
             creativeId = 0; // Unknown
             userId = '';    // Unknown
@@ -53,7 +46,7 @@ export class TrackingService {
             campaignId = parseInt(dto.cid, 10);
             creativeId = parseInt(dto.crid, 10);
             userId = dto.uid || '';
-            requestId = randomUUID(); // Generate new request_id for legacy tracking
+            requestId = randomUUID();
             clickId = undefined;
 
             this.logger.log(`Tracking via legacy method: campaign ${campaignId}, creative ${creativeId}`);
@@ -75,26 +68,8 @@ export class TrackingService {
 
         if (dto.cost) cost = parseFloat(dto.cost);
 
-        // 2. Persist to DB (Postgres)
+        // 2. Persist to DB (Postgres and/or BigQuery) via AnalyticsService
         const eventTime = new Date();
-        // For lightweight tracking, many fields will be null/0. This is expected.
-        if (campaignId > 0) {
-            await this.db.insert(schema.ad_events).values({
-                request_id: requestId,
-                click_id: clickId,
-                campaign_id: campaignId,
-                creative_id: creativeId,
-                user_id: userId,
-                event_type: eventType,
-                event_time: eventTime,
-                cost: cost.toString(),
-                device: device,
-                browser: browser,
-            }).catch(e => this.logger.error('Failed to insert tracking event', e));
-        }
-
-        // 3. Persist to BigQuery (Micro-Batching)
-        // We send what we have. For lightweight, it's mostly click_id + type + time.
         this.analyticsService.trackEvent({
             request_id: requestId,
             click_id: clickId,
@@ -110,10 +85,10 @@ export class TrackingService {
             device: device,
             browser: browser,
             bid: bid,
-            price: cost, // Price paid = cost (for simple CPM/CPC)
+            price: cost,
         });
 
-        // 4. Update Redis Counters
+        // 3. Update Redis Counters
         // We cannot update budget/freq without campaign_id/user_id.
         // If campaignId is known (legacy path), we update.
         if (campaignId > 0) {

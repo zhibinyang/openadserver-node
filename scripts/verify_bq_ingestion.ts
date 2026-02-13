@@ -6,7 +6,7 @@ async function verifyAnalytics() {
     console.log('=== Verifying Analytics Service ===');
 
     // 1. Initialize Service
-    const service = new AnalyticsService();
+    const service = new AnalyticsService(null as any);
     console.log('[PASS] Service Initialized');
 
     // 2. Track Events

@@ -9,7 +9,7 @@ import { randomUUID } from 'crypto';
 async function verifyTracking() {
     console.log('=== Verifying Request & Click Tracking ===');
 
-    const service = new AnalyticsService();
+    const service = new AnalyticsService(null as any);
 
     const requestId = randomUUID();
     const clickId = randomUUID();

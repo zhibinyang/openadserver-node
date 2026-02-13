@@ -156,6 +156,13 @@ export const ad_events = pgTable('ad_events', {
     event_type: integer('event_type').default(EventType.IMPRESSION),
     event_time: timestamp('event_time').notNull(),
 
+    ip: varchar('ip', { length: 45 }), // IPv6 support
+    country: varchar('country', { length: 2 }), // ISO 3166-1 alpha-2
+    city: varchar('city', { length: 255 }),
+
+    bid: numeric('bid', { precision: 12, scale: 6 }).default('0'),
+    price: numeric('price', { precision: 12, scale: 6 }).default('0'), // Actual price paid
+
     cost: numeric('cost', { precision: 12, scale: 6 }).default('0'),
 }, (table) => ({
     // Create index on click_id for fast lookups

@@ -1,10 +1,19 @@
 
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger, Inject } from '@nestjs/common';
 import { BigQueryWriteClient } from '@google-cloud/bigquery-storage';
 import * as protobuf from 'protobufjs';
 // Required for toDescriptor
 require('protobufjs/ext/descriptor');
 import { AdCandidate, UserContext, EventType } from '../../shared/types';
+import { DRIZZLE } from '../../database/database.module';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import * as schema from '../../database/schema';
+
+enum WriteTarget {
+    POSTGRES = 'POSTGRES',
+    BIGQUERY = 'BIGQUERY',
+    BOTH = 'BOTH',
+}
 
 @Injectable()
 export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
@@ -18,10 +27,20 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     private readonly projectId = process.env.GOOGLE_CLOUD_PROJECT || 'openadserver';
     private readonly datasetId = process.env.BQ_DATASET || 'analytics';
     private readonly tableId = process.env.BQ_TABLE || 'ad_events';
+    private readonly writeTarget: WriteTarget;
 
-    constructor() {
+    constructor(
+        @Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>,
+    ) {
         this.bqClient = new BigQueryWriteClient();
         this.initializeProto();
+
+        const target = process.env.WRITE_TARGET?.toUpperCase();
+        if (target === 'POSTGRES') this.writeTarget = WriteTarget.POSTGRES;
+        else if (target === 'BIGQUERY') this.writeTarget = WriteTarget.BIGQUERY;
+        else this.writeTarget = WriteTarget.BOTH;
+
+        this.logger.log(`Analytics Write Target: ${this.writeTarget}`);
     }
 
     private initializeProto() {
@@ -68,13 +87,59 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     /**
      * Track an event (Impression, Click, Conversion)
      */
-    trackEvent(event: any) {
+    async trackEvent(event: any) {
         // Validate or transform event here if necessary
-        this.buffer.push(event);
 
-        if (this.buffer.length >= 50) {
-            this.flush();
+        // 1. Write to Postgres (Immediate for now)
+        if (this.writeTarget === WriteTarget.POSTGRES || this.writeTarget === WriteTarget.BOTH) {
+            // Fire and forget to avoid blocking main flow, but log errors
+            this.writeToPostgres(event).catch(err =>
+                this.logger.error('Failed to write to Postgres', err)
+            );
         }
+
+        // 2. Buffer for BigQuery
+        if (this.writeTarget === WriteTarget.BIGQUERY || this.writeTarget === WriteTarget.BOTH) {
+            this.buffer.push(event);
+
+            if (this.buffer.length >= 50) {
+                this.flush();
+            }
+        }
+    }
+
+    private async writeToPostgres(event: any) {
+        // Map event to Postgres schema
+        // Note: event_time is in micros for BQ, but Postgres expects Date object or ISO string?
+        // Let's check how event_time is passed. 
+        // In previous changes, we converted to micros in `writeToBigQuery`.
+        // So the input `event` here likely has `event_time` as ms number (from Date.now()).
+
+        // Wait, let's check usage in EngineController/TrackingService.
+        // EngineController: event_time: Date.now()
+        // TrackingService: event_time: eventTime.getTime() (ms)
+
+        // So input is ms.
+
+        await this.db.insert(schema.ad_events).values({
+            request_id: event.request_id,
+            click_id: event.click_id || null, // Postgres optional
+            campaign_id: event.campaign_id || null,
+            creative_id: event.creative_id || null,
+            user_id: event.user_id || null,
+            event_type: event.event_type || EventType.IMPRESSION,
+            event_time: new Date(event.event_time), // Convert ms to Date
+            cost: (event.cost || 0).toString(),
+
+            // New columns
+            ip: event.ip || null,
+            country: event.country || null,
+            city: event.city || null,
+            device: event.device || null,
+            browser: event.browser || null,
+            bid: (event.bid || 0).toString(),
+            price: (event.price || 0).toString(),
+        });
     }
 
     private async flush() {
