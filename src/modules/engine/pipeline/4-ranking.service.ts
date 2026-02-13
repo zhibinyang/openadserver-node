@@ -1,10 +1,18 @@
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PipelineStep } from './step.interface';
 import { AdCandidate, UserContext, BidType } from '../../../shared/types';
 
+const BID_TYPE_NAMES: Record<number, string> = {
+    [BidType.CPM]: 'CPM',
+    [BidType.CPC]: 'CPC',
+    [BidType.CPA]: 'CPA',
+    [BidType.OCPM]: 'OCPM',
+};
+
 @Injectable()
 export class RankingService implements PipelineStep {
+    private readonly logger = new Logger(RankingService.name);
 
     // OPTIMIZATION 3: Removed async - pure synchronous computation
     execute(
@@ -18,7 +26,20 @@ export class RankingService implements PipelineStep {
         }
 
         // Sort descending by score
-        return candidates.sort((a, b) => (b.score || 0) - (a.score || 0));
+        const sorted = candidates.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+        // Log ranked candidates
+        this.logger.log(`Ranked ${sorted.length} candidates:`);
+        sorted.forEach((c, i) => {
+            const bidType = BID_TYPE_NAMES[c.bid_type] || 'UNKNOWN';
+            const pctr = c.pctr != null ? c.pctr.toFixed(6) : 'N/A';
+            const pcvr = c.pcvr != null ? c.pcvr.toFixed(6) : 'N/A';
+            this.logger.log(
+                `  #${i + 1} | Camp=${c.campaign_id} Cre=${c.creative_id} | ${bidType} $${c.bid} | pCTR=${pctr} pCVR=${pcvr} | eCPM=${c.ecpm?.toFixed(4)}`
+            );
+        });
+
+        return sorted;
     }
 
     private calculateEcpm(candidate: AdCandidate): number {

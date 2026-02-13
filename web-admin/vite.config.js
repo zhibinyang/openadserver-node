@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'htts://ads.zhibinyang.net',
+        target: 'http://localhost:3000',
         changeOrigin: true,
       }
     }
