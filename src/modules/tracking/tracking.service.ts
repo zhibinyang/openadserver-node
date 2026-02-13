@@ -7,6 +7,7 @@ import { RedisService } from '../../shared/redis/redis.service';
 import { TrackingDto, TrackingType } from './tracking.dto';
 import { EventType } from '../../shared/types';
 import { randomUUID } from 'crypto';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class TrackingService {
@@ -15,6 +16,7 @@ export class TrackingService {
     constructor(
         @Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>,
         private redisService: RedisService,
+        private analyticsService: AnalyticsService,
     ) { }
 
     async track(dto: TrackingDto): Promise<void> {
@@ -23,6 +25,16 @@ export class TrackingService {
         let userId: string | undefined;
         let requestId: string;
         let clickId = dto.click_id;
+
+        // Context fields
+        let device: string | undefined;
+        let browser: string | undefined;
+        let os: string | undefined;
+        let country: string | undefined;
+        let city: string | undefined;
+        let ip: string | undefined;
+        let appId: string | undefined;
+        let bid = 0;
 
         // Try click_id-based tracking first (new method)
         if (dto.click_id) {
@@ -34,6 +46,16 @@ export class TrackingService {
                 creativeId = clickData.creative_id;
                 userId = clickData.user_id;
                 requestId = clickData.request_id;
+
+                // Extract rich features
+                device = clickData.device;
+                browser = clickData.browser;
+                os = clickData.os;
+                country = clickData.country;
+                city = clickData.city;
+                ip = clickData.ip;
+                appId = clickData.app_id;
+                bid = clickData.bid || 0;
 
                 this.logger.log(`Tracking via click_id: ${dto.click_id} for campaign ${campaignId}`);
             } else {
@@ -68,7 +90,8 @@ export class TrackingService {
 
         if (dto.cost) cost = parseFloat(dto.cost);
 
-        // 2. Persist to DB
+        // 2. Persist to DB (Postgres)
+        const eventTime = new Date();
         await this.db.insert(schema.ad_events).values({
             request_id: requestId,
             click_id: clickId,
@@ -76,19 +99,38 @@ export class TrackingService {
             creative_id: creativeId,
             user_id: userId,
             event_type: eventType,
-            event_time: new Date(),
+            event_time: eventTime,
             cost: cost.toString(),
+            device: device,
+            browser: browser,
         }).catch(e => this.logger.error('Failed to insert tracking event', e));
 
-        // 3. Update Redis Counters
+        // 3. Persist to BigQuery (Micro-Batching)
+        this.analyticsService.trackEvent({
+            request_id: requestId,
+            click_id: clickId,
+            campaign_id: campaignId,
+            creative_id: creativeId,
+            user_id: userId,
+            event_type: eventType,
+            event_time: eventTime.getTime(), // ms
+            cost: cost,
+            ip: ip,
+            country: country,
+            city: city,
+            device: device,
+            browser: browser,
+            bid: bid,
+            price: cost, // Price paid = cost (for simple CPM/CPC)
+        });
 
-        // 3.1 Frequency Capping (Increments only on Impression)
+        // 4. Update Redis Counters
+        // ... (unchanged)
         if (eventType === EventType.IMPRESSION && userId) {
             const key = `freq:${userId}:${campaignId}`;
             await this.redisService.incr(key, 86400); // 1 day TTL
         }
 
-        // 3.2 Budget Tracking (Increments only if cost > 0)
         if (cost > 0) {
             const key = `budget:${campaignId}:${today}`;
             await this.redisService.hincrbyfloat(key, 'spent_today', cost);

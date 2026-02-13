@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../shared/redis/redis.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { CacheService } from './services/cache.service';
 import { TargetingMatcher } from './services/targeting.matcher';
 import { MacroReplacer } from './services/macro-replacer.service';
@@ -21,6 +22,7 @@ import { EngineController } from './engine.controller';
         DatabaseModule,
         RedisModule,
         ScheduleModule.forRoot(),
+        AnalyticsModule,
     ],
     providers: [
         CacheService,

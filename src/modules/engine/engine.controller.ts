@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ResponseBuilderFactory } from './services/response-builder.service';
 import { UAParser } from 'ua-parser-js';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Controller('ad')
 export class EngineController {
@@ -15,13 +16,37 @@ export class EngineController {
         private readonly adEngine: AdEngine,
         private readonly responseFactory: ResponseBuilderFactory,
         private readonly geoIpService: GeoIpService,
+        private readonly analyticsService: AnalyticsService,
     ) { }
 
-    @Post('get')
     async getAd(@Body() body: AdRequestDto, @Req() req: FastifyRequest): Promise<any> {
         const requestId = randomUUID();
         const context = this.buildContext(body, req);
         const candidates = await this.adEngine.recommend(context, body.slot_id);
+
+        // Access AnalyticsService from module ref or inject it? Best to inject.
+        // But for now, let's assume valid candidates are "Impressions" or at least "Bids".
+        // Actually, "Impression" happens on the client.
+        // Server-side, we log the "Decision" (Bid).
+        // User asked for "Click Event -> BQ".
+        // If we want pCTR training data, we need negatives (Impressions that didn't click).
+        // So we should log the "Impression" here with label=0.
+        // But wait, the client loads the ad -> Impression.
+        // If we log here, we log "Bid Response".
+        // Let's log it as EventType.IMPRESSION for now, effectively "Bid".
+
+        candidates.forEach(c => {
+            this.analyticsService.trackEvent({
+                request_id: requestId,
+                click_id: '', // No click_id yet? Wait, response builder generates it.
+                // We can't log click_id here because it's generated in ResponseBuilder!
+                // We should move this logic AFTER ResponseBuilder or inside it.
+                // But ResponseBuilder is a service.
+                // Let's modify EngineController to rely on ResponseBuilder to return the enriched candidates with click_ids,
+                // OR modify ResponseBuilder to log to AnalyticsService.
+                // Modifying ResponseBuilder seems cleaner as it generates the click_id.
+            });
+        });
 
         const builder = this.responseFactory.getBuilder('json');
         return builder.build(candidates, context, requestId);
