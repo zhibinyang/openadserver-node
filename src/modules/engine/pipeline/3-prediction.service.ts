@@ -12,7 +12,7 @@ export class PredictionService implements PipelineStep, OnModuleInit {
 
     // ONNX Session
     private session: any; // Use any to avoid TS issues with onnxruntime-node
-    private readonly MODEL_PATH = path.join(process.cwd(), 'models', 'lr_ctr.onnx');
+    private readonly MODEL_PATH = process.env.MODEL_PATH || path.join(process.cwd(), 'models', 'lr_ctr.onnx');
 
     async onModuleInit() {
         try {
