@@ -84,7 +84,10 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
         this.buffer = []; // Clear buffer immediately
 
         try {
-            this.logger.log(`Flushing ${batch.length} events to BigQuery...`);
+            const sampleIds = batch.length > 0
+                ? `[${batch[0].request_id} ... ${batch[batch.length - 1].request_id}]`
+                : '';
+            this.logger.log(`Flushing ${batch.length} events to BigQuery. IDs: ${sampleIds}`);
             await this.writeToBigQuery(batch);
             this.logger.log(`Successfully flushed ${batch.length} events.`);
         } catch (error) {

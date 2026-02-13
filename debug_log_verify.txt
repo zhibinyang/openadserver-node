@@ -1,0 +1,32 @@
+=== Verifying Analytics Service ===
+[PASS] Service Initialized
+Tracking 5 events...
+[PASS] Events Tracked (Buffered)
+Triggering Flush via onModuleDestroy...
+[32m[Nest] 59082  - [39m02/13/2026, 5:18:49 PM [32m    LOG[39m [38;5;3m[AnalyticsService] [39m[32mFlushing 5 events to BigQuery. IDs: [req_0 ... req_4][39m
+[PASS] Flush executed without crash (Auth error expected if no creds)
+[31m[Nest] 59082  - [39m02/13/2026, 5:19:03 PM [31m  ERROR[39m [38;5;3m[AnalyticsService] [39m[31mFailed to flush events to BigQuery[39m
+[31m[Nest] 59082  - [39m02/13/2026, 5:19:03 PM [31m  ERROR[39m [38;5;3m[AnalyticsService] [39mError: 5 NOT_FOUND: Project openadserver is not found. Make sure it references valid GCP project that hasn't been deleted.; Project id: openadserver
+    at callErrorFromStatus [90m(/Users/cy/node/openadserver-node/[39mnode_modules/[4m@grpc[24m/grpc-js/src/call.ts:84:17[90m)[39m
+    at Object.onReceiveStatus [90m(/Users/cy/node/openadserver-node/[39mnode_modules/[4m@grpc[24m/grpc-js/src/client.ts:706:51[90m)[39m
+    at Object.onReceiveStatus [90m(/Users/cy/node/openadserver-node/[39mnode_modules/[4m@grpc[24m/grpc-js/src/client-interceptors.ts:424:48[90m)[39m
+    at [90m/Users/cy/node/openadserver-node/[39mnode_modules/[4m@grpc[24m/grpc-js/src/resolving-call.ts:170:24
+[90m    at processTicksAndRejections (node:internal/process/task_queues:85:11)[39m
+for call at
+    at ServiceClientImpl.makeBidiStreamRequest [90m(/Users/cy/node/openadserver-node/[39mnode_modules/[4m@grpc[24m/grpc-js/src/client.ts:690:42[90m)[39m
+    at ServiceClientImpl.<anonymous> [90m(/Users/cy/node/openadserver-node/[39mnode_modules/[4m@grpc[24m/grpc-js/src/make-client.ts:189:15[90m)[39m
+    at [90m/Users/cy/node/openadserver-node/[39mnode_modules/[4m@google-cloud[24m/bigquery-storage/src/v1/big_query_write_client.ts:309:25
+    at [90m/Users/cy/node/openadserver-node/[39mnode_modules/[4mgoogle-gax[24m/build/src/streamingCalls/streamingApiCaller.js:47:28
+    at [90m/Users/cy/node/openadserver-node/[39mnode_modules/[4mgoogle-gax[24m/build/src/normalCalls/timeout.js:44:16
+    at StreamProxy.setStream [90m(/Users/cy/node/openadserver-node/[39mnode_modules/[4mgoogle-gax[24m/build/src/streamingCalls/streaming.js:262:24[90m)[39m
+    at StreamingApiCaller.call [90m(/Users/cy/node/openadserver-node/[39mnode_modules/[4mgoogle-gax[24m/build/src/streamingCalls/streamingApiCaller.js:55:16[90m)[39m
+    at [90m/Users/cy/node/openadserver-node/[39mnode_modules/[4mgoogle-gax[24m/build/src/createApiCall.js:110:30
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m {
+  code: [33m5[39m,
+  details: [32m"Project openadserver is not found. Make sure it references valid GCP project that hasn't been deleted.; Project id: openadserver"[39m,
+  metadata: Metadata {
+    internalRepr: Map(0) {},
+    opaqueData: Map(0) {},
+    options: {}
+  }
+}
