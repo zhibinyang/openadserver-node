@@ -29,6 +29,10 @@ COPY --from=builder /usr/src/app/drizzle ./drizzle
 COPY --from=builder /usr/src/app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /usr/src/app/docker-entrypoint.sh ./
 
+# Copy runtime data files
+COPY --from=builder /usr/src/app/libs ./libs
+COPY --from=builder /usr/src/app/models ./models
+
 # Copy debug scripts if needed
 COPY --from=builder /usr/src/app/scripts ./scripts
 
