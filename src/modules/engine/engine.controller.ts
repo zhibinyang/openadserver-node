@@ -3,6 +3,7 @@ import { Controller, Post, Body, Get, Query, Req, Res } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
 import { UserContext, CreativeType } from '../../shared/types';
+import { GeoIpService } from './services/geoip.service';
 import { randomUUID } from 'crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ResponseBuilderFactory } from './services/response-builder.service';
@@ -13,6 +14,7 @@ export class EngineController {
     constructor(
         private readonly adEngine: AdEngine,
         private readonly responseFactory: ResponseBuilderFactory,
+        private readonly geoIpService: GeoIpService,
     ) { }
 
     @Post('get')
@@ -67,13 +69,43 @@ export class EngineController {
     }
 
     private buildContext(dto: AdRequestDto, req: FastifyRequest): UserContext {
-        // 1. Initialize context with direct DTO values
+        // 1. IP Detection Logic
+        // Priority: DTO > X-Forwarded-For (Last) > Req IP
+        let ip = dto.ip;
+        if (!ip) {
+            const forwarded = req.headers['x-forwarded-for'];
+            if (forwarded) {
+                // x-forwarded-for can be string or string[]
+                const forwardedStr = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+                // User asked for LAST IP from XFF.
+                const parts = forwardedStr.split(',').map(s => s.trim());
+                if (parts.length > 0) {
+                    ip = parts[parts.length - 1];
+                }
+            }
+        }
+        if (!ip) {
+            ip = req.ip;
+        }
+
+        // 2. Country Logic
+        // Priority: DTO > GeoIP
+        let country = dto.country;
+        if (!country && ip) {
+            const geoCountry = this.geoIpService.getCountry(ip);
+            if (geoCountry) {
+                console.log(`[EngineController] GeoIP Resolved: ${geoCountry} from IP: ${ip}`);
+                country = geoCountry;
+            }
+        }
+
+        // 3. Initialize context
         const context: UserContext = {
             user_id: dto.user_id || '',
-            ip: dto.ip || req.ip,
+            ip: ip || '',
             os: dto.os || 'unknown', // Default to unknown if not provided
             device_model: dto.device_model,
-            country: dto.country,
+            country: country,
             city: dto.city,
             app_id: dto.app_id || 'unknown',
             age: dto.age,
@@ -81,37 +113,26 @@ export class EngineController {
             interests: dto.interests,
         };
 
-        // 2. Fallback: Parse User-Agent / Client Hints if OS not provided
-        // We also prepare for future expansion (browser, device model) but prioritize explicit DTO values
+        // 4. Fallback: Parse User-Agent / Client Hints if OS not provided
         if (context.os === 'unknown' || !context.device_model) {
             try {
-                // UAParser v2 supports passing headers object directly
-                // Fastify headers are IncomingHttpHeaders which is compatible
                 // @ts-ignore
                 const parser = new UAParser(req.headers);
                 const result = parser.getResult();
 
-                // Map specific fields
                 if (context.os === 'unknown' && result.os.name) {
                     context.os = result.os.name;
                 }
-
-                // Future expansion:
-                // if (!context.device_model && result.device.model) {
-                //     context.device_model = result.device.model;
-                // }
-                // context.browser = result.browser.name; // When we needed
-
-                // For now, adhere to explicit requirement: 
-                // "first phase only map os.name, keep manual os with higher priority"
-
             } catch (e) {
-                // Silent failure on parsing, keep defaults
+                // Silent failure
             }
         }
 
         if (context.os !== 'unknown') {
             console.log(`[EngineController] Detected OS: ${context.os} (From: ${dto.os ? 'DTO' : 'Header'})`);
+        }
+        if (country) {
+            console.log(`[EngineController] Detected Country: ${country} (From: ${dto.country ? 'DTO' : 'GeoIP'})`);
         }
 
         return context;

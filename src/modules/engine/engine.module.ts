@@ -13,6 +13,7 @@ import { PredictionService } from './pipeline/3-prediction.service';
 import { RankingService } from './pipeline/4-ranking.service';
 import { RerankService } from './pipeline/5-rerank.service';
 import { AdEngine } from './ad-engine.service';
+import { GeoIpService } from './services/geoip.service';
 import { EngineController } from './engine.controller';
 
 @Module({
@@ -30,6 +31,7 @@ import { EngineController } from './engine.controller';
         JsonResponseBuilder,
         VastResponseBuilder,
         ResponseBuilderFactory,
+        GeoIpService,
         // Pipeline Steps
         RetrievalService,
         FilterService,
