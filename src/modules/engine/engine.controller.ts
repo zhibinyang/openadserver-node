@@ -104,7 +104,8 @@ export class EngineController {
             user_id: dto.user_id || '',
             ip: ip || '',
             os: dto.os || 'unknown', // Default to unknown if not provided
-            device_model: dto.device_model,
+            device: dto.device,
+            browser: dto.browser,
             country: country,
             city: dto.city,
             app_id: dto.app_id || 'unknown',
@@ -113,23 +114,42 @@ export class EngineController {
             interests: dto.interests,
         };
 
-        // 4. Fallback: Parse User-Agent / Client Hints if OS not provided
-        if (context.os === 'unknown' || !context.device_model) {
+        // 4. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided
+        if (context.os === 'unknown' || !context.device || !context.browser) {
             try {
                 // @ts-ignore
                 const parser = new UAParser(req.headers);
                 const result = parser.getResult();
 
+                // OS
                 if (context.os === 'unknown' && result.os.name) {
                     context.os = result.os.name;
                 }
+
+                // Device
+                if (!context.device && result.device.model) {
+                    // Prefer 'Vendor Model', e.g. 'Apple iPhone'
+                    context.device = [result.device.vendor, result.device.model].filter(Boolean).join(' ');
+                }
+
+                // Browser
+                if (!context.browser && result.browser.name) {
+                    context.browser = result.browser.name;
+                }
+
             } catch (e) {
                 // Silent failure
             }
         }
 
         if (context.os !== 'unknown') {
-            console.log(`[EngineController] Detected OS: ${context.os} (From: ${dto.os ? 'DTO' : 'Header'})`);
+            console.log(`[EngineController] Detected OS: ${context.os}`);
+        }
+        if (context.device) {
+            console.log(`[EngineController] Detected Device: ${context.device}`);
+        }
+        if (context.browser) {
+            console.log(`[EngineController] Detected Browser: ${context.browser}`);
         }
         if (country) {
             console.log(`[EngineController] Detected Country: ${country} (From: ${dto.country ? 'DTO' : 'GeoIP'})`);

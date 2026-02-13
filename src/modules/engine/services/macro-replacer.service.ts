@@ -70,7 +70,8 @@ export class MacroReplacer {
             COUNTRY: userContext.country || '',
             CITY: userContext.city || '',
             APP_ID: userContext.app_id || '',
-            DEVICE_MODEL: userContext.device_model || '',
+            DEVICE_MODEL: userContext.device || '',
+            BROWSER: userContext.browser || '',
 
             // User Demographics (if available)
             AGE: userContext.age || '',
@@ -117,6 +118,7 @@ export class MacroReplacer {
             'CITY',
             'APP_ID',
             'DEVICE_MODEL',
+            'BROWSER',
             'AGE',
             'GENDER',
             'INTERESTS',

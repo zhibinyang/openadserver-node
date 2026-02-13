@@ -92,7 +92,8 @@ export interface UserContext {
     // Device
     os: string;
     os_version?: string;
-    device_model?: string;
+    device?: string;
+    browser?: string;
     device_brand?: string;
 
     // Geo

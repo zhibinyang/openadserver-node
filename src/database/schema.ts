@@ -150,6 +150,9 @@ export const ad_events = pgTable('ad_events', {
 
     user_id: varchar('user_id', { length: 255 }),
 
+    device: varchar('device', { length: 255 }),
+    browser: varchar('browser', { length: 255 }),
+
     event_type: integer('event_type').default(EventType.IMPRESSION),
     event_time: timestamp('event_time').notNull(),
 

@@ -21,7 +21,11 @@ export class AdRequestDto {
 
     @IsString()
     @IsOptional()
-    device_model?: string;
+    device?: string;
+
+    @IsString()
+    @IsOptional()
+    browser?: string;
 
     // Geo Info (optional overrides, usually derived from IP in real app)
     @IsString()

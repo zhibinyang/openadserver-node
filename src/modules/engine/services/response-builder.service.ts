@@ -47,6 +47,8 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                     os: context.os,
                     country: context.country,
                     app_id: context.app_id,
+                    device: context.device,
+                    browser: context.browser,
                 };
 
                 await this.redisService.set(
@@ -129,6 +131,8 @@ export class VastResponseBuilder implements AdResponseBuilder {
             os: context.os,
             country: context.country,
             app_id: context.app_id,
+            device: context.device,
+            browser: context.browser,
         };
 
         await this.redisService.set(

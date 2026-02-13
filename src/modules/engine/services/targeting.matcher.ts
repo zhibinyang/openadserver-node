@@ -63,13 +63,36 @@ export class TargetingMatcher {
     }
 
     private matchDevice(value: any, context: UserContext): boolean {
-        // Expected value: { os: ["ios", "android"] }
+        // Expected value: { os: ["ios", "android"], browser: ["chrome"], device: ["iphone"] }
+
+        let matched = true;
+
+        // 1. OS Match
         if (value.os && Array.isArray(value.os)) {
-            // simple case-insensitive match
-            if (context.os && value.os.includes(context.os.toLowerCase())) {
-                return true;
+            if (!context.os || !value.os.includes(context.os.toLowerCase())) {
+                matched = false;
             }
         }
-        return false;
+
+        // 2. Browser Match
+        if (matched && value.browser && Array.isArray(value.browser)) {
+            if (!context.browser || !value.browser.includes(context.browser.toLowerCase())) {
+                matched = false;
+            }
+        }
+
+        // 3. Device Model Match
+        if (matched && value.device && Array.isArray(value.device)) {
+            // Partial match? or Exact? Let's do partial includes for now
+            if (!context.device) {
+                matched = false;
+            } else {
+                const deviceLower = context.device.toLowerCase();
+                const anyMatch = value.device.some((d: string) => deviceLower.includes(d.toLowerCase()));
+                if (!anyMatch) matched = false;
+            }
+        }
+
+        return matched;
     }
 }
