@@ -60,7 +60,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                     landing_url: landingUrl,
                     imp_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp`,
                     click_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=click`,
-                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion`,
+                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion&conversion_value=\${CONVERSION_VALUE}`,
                 };
             })
         );

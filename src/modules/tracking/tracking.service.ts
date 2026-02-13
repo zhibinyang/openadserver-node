@@ -65,6 +65,11 @@ export class TrackingService {
         if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) {
             eventType = EventType.CONVERSION;
         }
+        if (dto.type === TrackingType.VIDEO_START) eventType = EventType.VIDEO_START;
+        if (dto.type === TrackingType.VIDEO_FIRST_QUARTILE) eventType = EventType.VIDEO_FIRST_QUARTILE;
+        if (dto.type === TrackingType.VIDEO_MIDPOINT) eventType = EventType.VIDEO_MIDPOINT;
+        if (dto.type === TrackingType.VIDEO_THIRD_QUARTILE) eventType = EventType.VIDEO_THIRD_QUARTILE;
+        if (dto.type === TrackingType.VIDEO_COMPLETE) eventType = EventType.VIDEO_COMPLETE;
 
         if (dto.cost) cost = parseFloat(dto.cost);
 
