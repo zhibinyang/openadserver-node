@@ -37,8 +37,10 @@ export class AdEngine {
         candidates = await this.filterStep.execute(candidates, context);
         const countFilter = candidates.length;
 
-        // 3. Prediction (OPTIMIZATION 3: Pure sync, no await)
-        candidates = this.predictionStep.execute(candidates, context);
+        // 3. Prediction (Now async due to ONNX)
+        const predictionStart = Date.now();
+        candidates = await this.predictionStep.execute(candidates, context);
+        const predictionDuration = Date.now() - predictionStart;
 
         // 4. Ranking (OPTIMIZATION 3: Pure sync, no await)
         candidates = this.rankingStep.execute(candidates, context);
@@ -49,7 +51,7 @@ export class AdEngine {
 
         const duration = Date.now() - start;
         this.logger.log(
-            `Pipeline finished in ${duration}ms. ` +
+            `Pipeline finished in ${duration}ms (Prediction: ${predictionDuration}ms). ` +
             `Retrieved: ${countRetrieval} -> Filtered: ${countFilter} -> Final: ${candidates.length}`
         );
 
