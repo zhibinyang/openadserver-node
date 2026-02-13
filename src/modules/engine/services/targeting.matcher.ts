@@ -34,12 +34,16 @@ export class TargetingMatcher {
             case 'device':
                 matched = this.matchDevice(value, context);
                 break;
-            // Add more rule types here (age, gender, interest)
+            case 'combined': {
+                // Both geo and device must pass (AND)
+                const hasGeo = value.countries || value.cities;
+                const hasDevice = value.os || value.browser || value.device;
+                const geoOk = hasGeo ? this.matchGeo(value, context) : true;
+                const deviceOk = hasDevice ? this.matchDevice(value, context) : true;
+                matched = geoOk && deviceOk;
+                break;
+            }
             default:
-                // Unknown rule type, safe to ignore or strict fail? 
-                // Typically legacy safe: ignore -> true. 
-                // But here we assume strict control -> false if unknown?
-                // Let's assume ignore for now to prevent outage on new rule types.
                 return true;
         }
 
