@@ -6,6 +6,7 @@ import { UserContext, CreativeType } from '../../shared/types';
 import { randomUUID } from 'crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ResponseBuilderFactory } from './services/response-builder.service';
+import { UAParser } from 'ua-parser-js';
 
 @Controller('ad')
 export class EngineController {
@@ -66,10 +67,11 @@ export class EngineController {
     }
 
     private buildContext(dto: AdRequestDto, req: FastifyRequest): UserContext {
-        return {
+        // 1. Initialize context with direct DTO values
+        const context: UserContext = {
             user_id: dto.user_id || '',
             ip: dto.ip || req.ip,
-            os: dto.os || 'unknown',
+            os: dto.os || 'unknown', // Default to unknown if not provided
             device_model: dto.device_model,
             country: dto.country,
             city: dto.city,
@@ -78,5 +80,40 @@ export class EngineController {
             gender: dto.gender,
             interests: dto.interests,
         };
+
+        // 2. Fallback: Parse User-Agent / Client Hints if OS not provided
+        // We also prepare for future expansion (browser, device model) but prioritize explicit DTO values
+        if (context.os === 'unknown' || !context.device_model) {
+            try {
+                // UAParser v2 supports passing headers object directly
+                // Fastify headers are IncomingHttpHeaders which is compatible
+                // @ts-ignore
+                const parser = new UAParser(req.headers);
+                const result = parser.getResult();
+
+                // Map specific fields
+                if (context.os === 'unknown' && result.os.name) {
+                    context.os = result.os.name;
+                }
+
+                // Future expansion:
+                // if (!context.device_model && result.device.model) {
+                //     context.device_model = result.device.model;
+                // }
+                // context.browser = result.browser.name; // When we needed
+
+                // For now, adhere to explicit requirement: 
+                // "first phase only map os.name, keep manual os with higher priority"
+
+            } catch (e) {
+                // Silent failure on parsing, keep defaults
+            }
+        }
+
+        if (context.os !== 'unknown') {
+            console.log(`[EngineController] Detected OS: ${context.os} (From: ${dto.os ? 'DTO' : 'Header'})`);
+        }
+
+        return context;
     }
 }
