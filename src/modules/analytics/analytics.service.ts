@@ -63,6 +63,16 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 string city = 13;
                 double bid = 14;
                 double price = 15;
+                string os = 16;
+                double conversion_value = 17;
+                int32 video_duration = 18;
+                int32 banner_width = 19;
+                int32 banner_height = 20;
+                string referer = 21;
+                int32 slot_type = 22;
+                string slot_id = 23;
+                int32 bid_type = 24;
+                double ecpm = 25;
             }
         `;
         const { parse } = protobuf;
@@ -123,15 +133,13 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
 
         await this.db.insert(schema.ad_events).values({
             request_id: event.request_id,
-            click_id: event.click_id || null, // Postgres optional
+            click_id: event.click_id || null,
             campaign_id: event.campaign_id || null,
             creative_id: event.creative_id || null,
             user_id: event.user_id || null,
             event_type: event.event_type || EventType.IMPRESSION,
-            event_time: new Date(event.event_time), // Convert ms to Date
+            event_time: new Date(event.event_time),
             cost: (event.cost || 0).toString(),
-
-            // New columns
             ip: event.ip || null,
             country: event.country || null,
             city: event.city || null,
@@ -139,6 +147,17 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
             browser: event.browser || null,
             bid: (event.bid || 0).toString(),
             price: (event.price || 0).toString(),
+            // New fields
+            os: event.os || null,
+            conversion_value: event.conversion_value != null ? event.conversion_value.toString() : null,
+            video_duration: event.video_duration || null,
+            banner_width: event.banner_width || null,
+            banner_height: event.banner_height || null,
+            referer: event.referer || null,
+            slot_type: event.slot_type || null,
+            slot_id: event.slot_id || null,
+            bid_type: event.bid_type || null,
+            ecpm: event.ecpm != null ? event.ecpm.toString() : null,
         });
     }
 
@@ -184,6 +203,16 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 city: row.city || '',
                 bid: row.bid || 0.0,
                 price: row.price || 0.0,
+                os: row.os || '',
+                conversion_value: row.conversion_value || 0.0,
+                video_duration: row.video_duration || 0,
+                banner_width: row.banner_width || 0,
+                banner_height: row.banner_height || 0,
+                referer: row.referer || '',
+                slot_type: row.slot_type || 0,
+                slot_id: row.slot_id || '',
+                bid_type: row.bid_type || 0,
+                ecpm: row.ecpm || 0.0,
             };
 
             // Verify message

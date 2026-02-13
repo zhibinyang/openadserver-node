@@ -77,7 +77,7 @@ export class TrackingService {
             creative_id: creativeId,
             user_id: userId,
             event_type: eventType,
-            event_time: eventTime.getTime(), // ms
+            event_time: eventTime.getTime(),
             cost: cost,
             ip: ip,
             country: country,
@@ -86,6 +86,7 @@ export class TrackingService {
             browser: browser,
             bid: bid,
             price: cost,
+            conversion_value: dto.conversion_value ? parseFloat(dto.conversion_value) : null,
         });
 
         // 3. Update Redis Counters

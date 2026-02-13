@@ -111,6 +111,11 @@ export interface UserContext {
     network?: string;
     carrier?: string;
 
+    // Slot & Referer
+    slot_type?: number;  // CreativeType enum
+    slot_id?: string;
+    referer?: string;
+
     // Features (for ML)
     age?: number;
     gender?: string;

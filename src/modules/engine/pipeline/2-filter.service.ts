@@ -20,6 +20,18 @@ export class FilterService implements PipelineStep {
     ): Promise<AdCandidate[]> {
         if (candidates.length === 0) return [];
 
+        // 0. Filter by slot_type (creative_type must match)
+        if (context.slot_type) {
+            const before = candidates.length;
+            candidates = candidates.filter(c => c.creative_type === context.slot_type);
+            if (candidates.length < before) {
+                this.logger.log(
+                    `Slot type filter: ${before} -> ${candidates.length} (slot_type=${context.slot_type})`
+                );
+            }
+            if (candidates.length === 0) return [];
+        }
+
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
         // OPTIMIZATION 1: Batch Redis operations using pipeline

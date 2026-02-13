@@ -17,7 +17,17 @@ CREATE TABLE IF NOT EXISTS `analytics.ad_events` (
   country STRING,
   city STRING,
   bid FLOAT64,                 -- Bid Amount
-  price FLOAT64                -- Actual Price Paid
+  price FLOAT64,               -- Actual Price Paid
+  os STRING,
+  conversion_value FLOAT64,    -- Conversion value (NULL for non-conversions)
+  video_duration INT64,        -- Video duration in seconds
+  banner_width INT64,
+  banner_height INT64,
+  referer STRING,
+  slot_type INT64,             -- CreativeType enum (1=Banner, 2=Native, 3=Video, 4=Interstitial)
+  slot_id STRING,
+  bid_type INT64,              -- BidType enum (1=CPM, 2=CPC, 3=CPA, 4=OCPM)
+  ecpm FLOAT64                 -- Effective CPM
 )
 PARTITION BY DATE(event_time)  -- Partition by day for cost/performance optimization
 CLUSTER BY campaign_id, event_type; -- Cluster for faster filtering

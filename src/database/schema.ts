@@ -164,6 +164,18 @@ export const ad_events = pgTable('ad_events', {
     price: numeric('price', { precision: 12, scale: 6 }).default('0'), // Actual price paid
 
     cost: numeric('cost', { precision: 12, scale: 6 }).default('0'),
+
+    // New fields
+    os: varchar('os', { length: 50 }),
+    conversion_value: numeric('conversion_value', { precision: 12, scale: 6 }),
+    video_duration: integer('video_duration'),         // seconds
+    banner_width: integer('banner_width'),
+    banner_height: integer('banner_height'),
+    referer: varchar('referer', { length: 2048 }),
+    slot_type: integer('slot_type'),                   // CreativeType enum
+    slot_id: varchar('slot_id', { length: 255 }),
+    bid_type: integer('bid_type'),                     // BidType enum (1=CPM, 2=CPC, 3=CPA, 4=OCPM)
+    ecpm: numeric('ecpm', { precision: 12, scale: 6 }),
 }, (table) => ({
     // Create index on click_id for fast lookups
     clickIdIdx: index('ad_events_click_id_idx').on(table.click_id),

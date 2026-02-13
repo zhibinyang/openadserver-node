@@ -39,4 +39,9 @@ export class TrackingDto {
     @IsNumberString()
     @IsOptional()
     cost?: string;
+
+    // Optional: Conversion value for conversion events
+    @IsNumberString()
+    @IsOptional()
+    conversion_value?: string;
 }

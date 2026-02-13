@@ -6,6 +6,11 @@ export class AdRequestDto {
     @IsString()
     slot_id: string;
 
+    @IsNumber()
+    @IsOptional()
+    @Type(() => Number)
+    slot_type?: number; // CreativeType enum: 1=BANNER, 2=NATIVE, 3=VIDEO, 4=INTERSTITIAL
+
     @IsString()
     @IsOptional()
     user_id?: string;

@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Get, Query, Req, Res } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Req, Res, BadRequestException } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
 import { UserContext, CreativeType, EventType } from '../../shared/types';
@@ -21,6 +21,9 @@ export class EngineController {
 
     @Post('get')
     async getAd(@Body() body: AdRequestDto, @Req() req: FastifyRequest): Promise<any> {
+        if (!body.slot_type) {
+            throw new BadRequestException('slot_type is required for /ad/get');
+        }
         const requestId = randomUUID();
         const context = this.buildContext(body, req);
         const candidates = await this.adEngine.recommend(context, body.slot_id);
@@ -48,15 +51,23 @@ export class EngineController {
                 user_id: context.user_id,
                 device: context.device,
                 browser: context.browser,
-                event_type: EventType.REQUEST, // Log as REQUEST
+                event_type: EventType.REQUEST,
                 event_time: Date.now(),
-                cost: 0, // No cost yet
+                cost: 0,
                 ip: context.ip,
                 country: context.country,
                 city: context.city,
                 bid: c.bid,
-                price: c.bid, // Using bid as price for now in logs
-                // We log the FULL context here
+                price: c.bid,
+                os: context.os,
+                referer: context.referer,
+                slot_type: context.slot_type,
+                slot_id: context.slot_id,
+                banner_width: c.width || null,
+                banner_height: c.height || null,
+                video_duration: c.metadata?.video_duration || null,
+                bid_type: c.bid_type,
+                ecpm: c.ecpm || null,
             });
         });
 
@@ -71,15 +82,12 @@ export class EngineController {
         @Res() res: FastifyReply
     ): Promise<void> {
         const requestId = randomUUID();
-        // For GET requests, we map query params to DTO
         const context = this.buildContext(query, req);
+        context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, query.slot_id);
 
-        // Filter for video ads only
-        const videoCandidates = candidates.filter(c => c.creative_type === CreativeType.VIDEO);
-
         const builder = this.responseFactory.getBuilder('vast');
-        const xml = await builder.build(videoCandidates, context, requestId);
+        const xml = await builder.build(candidates, context, requestId);
 
         res.header('Content-Type', 'text/xml');
         res.send(xml);
@@ -93,13 +101,11 @@ export class EngineController {
     ): Promise<void> {
         const requestId = randomUUID();
         const context = this.buildContext(body, req);
+        context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, body.slot_id);
 
-        // Filter for video ads only
-        const videoCandidates = candidates.filter(c => c.creative_type === CreativeType.VIDEO);
-
         const builder = this.responseFactory.getBuilder('vast');
-        const xml = await builder.build(videoCandidates, context, requestId);
+        const xml = await builder.build(candidates, context, requestId);
 
         res.header('Content-Type', 'text/xml');
         res.send(xml);
@@ -140,7 +146,7 @@ export class EngineController {
         const context: UserContext = {
             user_id: dto.user_id || '',
             ip: ip || '',
-            os: dto.os || 'unknown', // Default to unknown if not provided
+            os: dto.os || 'unknown',
             device: dto.device,
             browser: dto.browser,
             country: country,
@@ -149,6 +155,9 @@ export class EngineController {
             age: dto.age,
             gender: dto.gender,
             interests: dto.interests,
+            slot_type: dto.slot_type,
+            slot_id: dto.slot_id,
+            referer: (req.headers['referer'] || req.headers['referrer'] || '') as string,
         };
 
         // 4. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided
