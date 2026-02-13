@@ -131,14 +131,20 @@ export class EngineController {
             ip = req.ip;
         }
 
-        // 2. Country Logic
+        // 2. Geo Logic
         // Priority: DTO > GeoIP
         let country = dto.country;
-        if (!country && ip) {
-            const geoCountry = this.geoIpService.getCountry(ip);
-            if (geoCountry) {
-                console.log(`[EngineController] GeoIP Resolved: ${geoCountry} from IP: ${ip}`);
-                country = geoCountry;
+        let city = dto.city;
+        if ((!country || !city) && ip) {
+            const geo = this.geoIpService.resolve(ip);
+            if (!country && geo.country) {
+                country = geo.country;
+            }
+            if (!city && geo.city) {
+                city = geo.city;
+            }
+            if (geo.country || geo.city) {
+                console.log(`[EngineController] GeoIP Resolved: country=${geo.country}, city=${geo.city} from IP: ${ip}`);
             }
         }
 
@@ -150,7 +156,7 @@ export class EngineController {
             device: dto.device,
             browser: dto.browser,
             country: country,
-            city: dto.city,
+            city: city,
             app_id: dto.app_id || 'unknown',
             age: dto.age,
             gender: dto.gender,

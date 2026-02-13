@@ -3,42 +3,54 @@ import * as maxmind from 'maxmind';
 import * as path from 'path';
 import * as fs from 'fs';
 
+export interface GeoResult {
+    country: string | null;
+    city: string | null;
+}
+
 @Injectable()
 export class GeoIpService implements OnModuleInit {
     private readonly logger = new Logger(GeoIpService.name);
-    private lookup: maxmind.Reader<maxmind.CountryResponse> | null = null;
+    private lookup: maxmind.Reader<maxmind.CityResponse> | null = null;
 
     async onModuleInit() {
-        const dbPath = process.env.GEO_DB_PATH || path.join(process.cwd(), 'models', 'GeoLite2-Country.mmdb');
+        const dbPath = process.env.GEO_DB_PATH || path.join(process.cwd(), 'libs', 'geo', 'GeoLite2-City.mmdb');
 
         if (!fs.existsSync(dbPath)) {
-            this.logger.warn(`GeoIP database not found at ${dbPath}. Country resolution will be disabled.`);
+            this.logger.warn(`GeoIP database not found at ${dbPath}. Geo resolution will be disabled.`);
             return;
         }
 
         try {
-            this.lookup = await maxmind.open<maxmind.CountryResponse>(dbPath);
-            this.logger.log(`Loaded GeoIP database from ${dbPath}`);
+            this.lookup = await maxmind.open<maxmind.CityResponse>(dbPath);
+            this.logger.log(`Loaded GeoIP City database from ${dbPath}`);
         } catch (e) {
             this.logger.error(`Failed to load GeoIP database: ${e.message}`, e.stack);
         }
     }
 
-    public getCountry(ip: string): string | null {
+    public resolve(ip: string): GeoResult {
         if (!this.lookup) {
-            return null;
+            return { country: null, city: null };
         }
 
         try {
-            // maxmind.validate(ip) checks if it's a valid IP
             if (!maxmind.validate(ip)) {
-                return null;
+                return { country: null, city: null };
             }
             const result = this.lookup.get(ip);
-            return result?.country?.iso_code || null;
+            return {
+                country: result?.country?.iso_code || null,
+                city: result?.city?.names?.en || null,
+            };
         } catch (e) {
             this.logger.warn(`Error resolving IP ${ip}: ${e.message}`);
-            return null;
+            return { country: null, city: null };
         }
+    }
+
+    /** @deprecated Use resolve() instead */
+    public getCountry(ip: string): string | null {
+        return this.resolve(ip).country;
     }
 }
