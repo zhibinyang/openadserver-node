@@ -41,6 +41,7 @@ export enum EventType {
     VIDEO_MIDPOINT = 6,
     VIDEO_THIRD_QUARTILE = 7,
     VIDEO_COMPLETE = 8,
+    REQUEST = 9, // Ad Request / Decision Log
 }
 
 /**

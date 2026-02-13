@@ -2,7 +2,7 @@
 import { Controller, Post, Body, Get, Query, Req, Res } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
-import { UserContext, CreativeType } from '../../shared/types';
+import { UserContext, CreativeType, EventType } from '../../shared/types';
 import { GeoIpService } from './services/geoip.service';
 import { randomUUID } from 'crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
@@ -19,6 +19,7 @@ export class EngineController {
         private readonly analyticsService: AnalyticsService,
     ) { }
 
+    @Post('get')
     async getAd(@Body() body: AdRequestDto, @Req() req: FastifyRequest): Promise<any> {
         const requestId = randomUUID();
         const context = this.buildContext(body, req);
@@ -36,15 +37,26 @@ export class EngineController {
         // Let's log it as EventType.IMPRESSION for now, effectively "Bid".
 
         candidates.forEach(c => {
+            // Generate click_id here so we can log it with the request
+            c.click_id = randomUUID();
+
             this.analyticsService.trackEvent({
                 request_id: requestId,
-                click_id: '', // No click_id yet? Wait, response builder generates it.
-                // We can't log click_id here because it's generated in ResponseBuilder!
-                // We should move this logic AFTER ResponseBuilder or inside it.
-                // But ResponseBuilder is a service.
-                // Let's modify EngineController to rely on ResponseBuilder to return the enriched candidates with click_ids,
-                // OR modify ResponseBuilder to log to AnalyticsService.
-                // Modifying ResponseBuilder seems cleaner as it generates the click_id.
+                click_id: c.click_id,
+                campaign_id: c.campaign_id,
+                creative_id: c.creative_id,
+                user_id: context.user_id,
+                device: context.device,
+                browser: context.browser,
+                event_type: EventType.REQUEST, // Log as REQUEST
+                event_time: Date.now(),
+                cost: 0, // No cost yet
+                ip: context.ip,
+                country: context.country,
+                city: context.city,
+                bid: c.bid,
+                price: c.bid, // Using bid as price for now in logs
+                // We log the FULL context here
             });
         });
 

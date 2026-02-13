@@ -20,7 +20,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
 
     constructor(
         private readonly macroReplacer: MacroReplacer,
-        private readonly redisService: RedisService,
+        // private readonly redisService: RedisService, // Removed for lightweight tracking
     ) { }
 
     async build(candidates: AdCandidate[], context: UserContext, requestId: string): Promise<any> {
@@ -29,33 +29,10 @@ export class JsonResponseBuilder implements AdResponseBuilder {
 
         const enrichedCandidates = await Promise.all(
             candidates.map(async (c) => {
-                const clickId = randomUUID();
+                const clickId = c.click_id || randomUUID();
 
-                // Store click metadata in Redis
-                const clickData = {
-                    request_id: requestId,
-                    campaign_id: c.campaign_id,
-                    creative_id: c.creative_id,
-                    advertiser_id: c.advertiser_id,
-                    user_id: context.user_id || '',
-                    bid: c.bid,
-                    bid_type: c.bid_type,
-                    ecpm: c.ecpm || 0,
-                    pctr: c.pctr || 0,
-                    pcvr: c.pcvr || 0,
-                    timestamp: Date.now(),
-                    os: context.os,
-                    country: context.country,
-                    app_id: context.app_id,
-                    device: context.device,
-                    browser: context.browser,
-                };
-
-                await this.redisService.set(
-                    `click:${clickId}`,
-                    JSON.stringify(clickData),
-                    this.CLICK_ID_TTL
-                );
+                // Store click metadata in Redis -> REMOVED
+                // We now rely on Request Log in BigQuery for context.
 
                 // Macro replacement
                 const originalLandingUrl = this.macroReplacer.replace(c.landing_url, {
@@ -101,7 +78,7 @@ export class VastResponseBuilder implements AdResponseBuilder {
 
     constructor(
         private readonly macroReplacer: MacroReplacer,
-        private readonly redisService: RedisService,
+        // private readonly redisService: RedisService,
         private readonly vastBuilder: VastBuilder,
     ) { }
 
@@ -112,34 +89,11 @@ export class VastResponseBuilder implements AdResponseBuilder {
 
         // VAST usually returns one ad per response for basic implementations
         const c = candidates[0];
-        const clickId = randomUUID();
+        const clickId = c.click_id || randomUUID();
         const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
-        // Store click metadata in Redis
-        const clickData = {
-            request_id: requestId,
-            campaign_id: c.campaign_id,
-            creative_id: c.creative_id,
-            advertiser_id: c.advertiser_id,
-            user_id: context.user_id || '',
-            bid: c.bid,
-            bid_type: c.bid_type,
-            ecpm: c.ecpm || 0,
-            pctr: c.pctr || 0,
-            pcvr: c.pcvr || 0,
-            timestamp: Date.now(),
-            os: context.os,
-            country: context.country,
-            app_id: context.app_id,
-            device: context.device,
-            browser: context.browser,
-        };
-
-        await this.redisService.set(
-            `click:${clickId}`,
-            JSON.stringify(clickData),
-            this.CLICK_ID_TTL
-        );
+        // Store click metadata in Redis -> REMOVED
+        // We now rely on Request Log in BigQuery for context.
 
         // Macro replacement
         const originalLandingUrl = this.macroReplacer.replace(c.landing_url, {

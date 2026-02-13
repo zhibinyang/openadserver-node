@@ -27,47 +27,32 @@ export class TrackingService {
         let clickId = dto.click_id;
 
         // Context fields
+        // Context fields - Now mostly empty for lightweight tracking
         let device: string | undefined;
         let browser: string | undefined;
         let os: string | undefined;
         let country: string | undefined;
         let city: string | undefined;
-        let ip: string | undefined;
+        let ip: string | undefined; // We could extract from request if passed to track()
         let appId: string | undefined;
         let bid = 0;
 
-        // Try click_id-based tracking first (new method)
+        // Try click_id-based tracking (lightweight)
         if (dto.click_id) {
-            const clickDataStr = await this.redisService.get(`click:${dto.click_id}`);
+            // We NO LONGER fetch context from Redis.
+            // We rely on BigQuery to join 'click_id' with the original 'REQUEST' event.
+            campaignId = 0; // Unknown
+            creativeId = 0; // Unknown
+            userId = '';    // Unknown
+            requestId = ''; // Unknown
 
-            if (clickDataStr) {
-                const clickData = JSON.parse(clickDataStr);
-                campaignId = clickData.campaign_id;
-                creativeId = clickData.creative_id;
-                userId = clickData.user_id;
-                requestId = clickData.request_id;
-
-                // Extract rich features
-                device = clickData.device;
-                browser = clickData.browser;
-                os = clickData.os;
-                country = clickData.country;
-                city = clickData.city;
-                ip = clickData.ip;
-                appId = clickData.app_id;
-                bid = clickData.bid || 0;
-
-                this.logger.log(`Tracking via click_id: ${dto.click_id} for campaign ${campaignId}`);
-            } else {
-                this.logger.warn(`Click ID not found in Redis: ${dto.click_id}`);
-                return; // Skip tracking if click_id is invalid
-            }
+            this.logger.log(`Tracking via click_id: ${dto.click_id} (Lightweight - Log & Join)`);
         }
         // Fallback to legacy method (cid/crid)
         else if (dto.cid && dto.crid) {
             campaignId = parseInt(dto.cid, 10);
             creativeId = parseInt(dto.crid, 10);
-            userId = dto.uid;
+            userId = dto.uid || '';
             requestId = randomUUID(); // Generate new request_id for legacy tracking
             clickId = undefined;
 
@@ -92,20 +77,24 @@ export class TrackingService {
 
         // 2. Persist to DB (Postgres)
         const eventTime = new Date();
-        await this.db.insert(schema.ad_events).values({
-            request_id: requestId,
-            click_id: clickId,
-            campaign_id: campaignId,
-            creative_id: creativeId,
-            user_id: userId,
-            event_type: eventType,
-            event_time: eventTime,
-            cost: cost.toString(),
-            device: device,
-            browser: browser,
-        }).catch(e => this.logger.error('Failed to insert tracking event', e));
+        // For lightweight tracking, many fields will be null/0. This is expected.
+        if (campaignId > 0) {
+            await this.db.insert(schema.ad_events).values({
+                request_id: requestId,
+                click_id: clickId,
+                campaign_id: campaignId,
+                creative_id: creativeId,
+                user_id: userId,
+                event_type: eventType,
+                event_time: eventTime,
+                cost: cost.toString(),
+                device: device,
+                browser: browser,
+            }).catch(e => this.logger.error('Failed to insert tracking event', e));
+        }
 
         // 3. Persist to BigQuery (Micro-Batching)
+        // We send what we have. For lightweight, it's mostly click_id + type + time.
         this.analyticsService.trackEvent({
             request_id: requestId,
             click_id: clickId,
@@ -125,15 +114,18 @@ export class TrackingService {
         });
 
         // 4. Update Redis Counters
-        // ... (unchanged)
-        if (eventType === EventType.IMPRESSION && userId) {
-            const key = `freq:${userId}:${campaignId}`;
-            await this.redisService.incr(key, 86400); // 1 day TTL
-        }
+        // We cannot update budget/freq without campaign_id/user_id.
+        // If campaignId is known (legacy path), we update.
+        if (campaignId > 0) {
+            if (eventType === EventType.IMPRESSION && userId) {
+                const key = `freq:${userId}:${campaignId}`;
+                await this.redisService.incr(key, 86400); // 1 day TTL
+            }
 
-        if (cost > 0) {
-            const key = `budget:${campaignId}:${today}`;
-            await this.redisService.hincrbyfloat(key, 'spent_today', cost);
+            if (cost > 0) {
+                const key = `budget:${campaignId}:${today}`;
+                await this.redisService.hincrbyfloat(key, 'spent_today', cost);
+            }
         }
     }
 }
