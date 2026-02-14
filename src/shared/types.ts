@@ -75,6 +75,7 @@ export interface AdCandidate {
     creative_type: CreativeType;
     width?: number;
     height?: number;
+    duration?: number;
 
     // Tracking ID (generated at response time)
     click_id?: string;

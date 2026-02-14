@@ -55,6 +55,7 @@ export class RetrievalService implements PipelineStep {
                 landing_url: creative.landing_url,
                 width: creative.width || 0,
                 height: creative.height || 0,
+                duration: creative.duration || 0,
                 metadata: {},
             });
         }

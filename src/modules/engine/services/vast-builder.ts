@@ -3,28 +3,28 @@ import { Injectable } from '@nestjs/common';
 import { AdCandidate } from '../../../shared/types';
 
 export interface VastTrackingEvents {
-    impression: string;
-    clickThrough: string;
-    clickTracking: string;
-    start: string;
-    firstQuartile: string;
-    midpoint: string;
-    thirdQuartile: string;
-    complete: string;
+  impression: string;
+  clickThrough: string;
+  clickTracking: string;
+  start: string;
+  firstQuartile: string;
+  midpoint: string;
+  thirdQuartile: string;
+  complete: string;
 }
 
 @Injectable()
 export class VastBuilder {
-    /**
-     * Builds a VAST 3.0 XML response for a single ad candidate.
-     */
-    build(candidate: AdCandidate, tracking: VastTrackingEvents, requestId: string): string {
-        // Escape special characters in strings to be XML safe
-        const title = this.escapeXml(candidate.title || 'Video Ad');
-        const description = this.escapeXml(candidate.description || '');
-        const duration = this.formatDuration(candidate.metadata?.duration || 15); // Default 15s if missing
+  /**
+   * Builds a VAST 3.0 XML response for a single ad candidate.
+   */
+  build(candidate: AdCandidate, tracking: VastTrackingEvents, requestId: string): string {
+    // Escape special characters in strings to be XML safe
+    const title = this.escapeXml(candidate.title || 'Video Ad');
+    const description = this.escapeXml(candidate.description || '');
+    const duration = this.formatDuration(candidate.duration || candidate.metadata?.duration || 15); // Default 15s if missing
 
-        return `<?xml version="1.0" encoding="UTF-8"?>
+    return `<?xml version="1.0" encoding="UTF-8"?>
 <VAST version="3.0">
   <Ad id="${candidate.campaign_id}">
     <InLine>
@@ -59,34 +59,34 @@ export class VastBuilder {
     </InLine>
   </Ad>
 </VAST>`;
-    }
+  }
 
-    /**
-     * Helper to return an empty VAST response (No Ad).
-     */
-    buildEmpty(): string {
-        return `<?xml version="1.0" encoding="UTF-8"?>
+  /**
+   * Helper to return an empty VAST response (No Ad).
+   */
+  buildEmpty(): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
 <VAST version="3.0">
 </VAST>`;
-    }
+  }
 
-    private escapeXml(unsafe: string): string {
-        return unsafe.replace(/[<>&'"]/g, (c) => {
-            switch (c) {
-                case '<': return '&lt;';
-                case '>': return '&gt;';
-                case '&': return '&amp;';
-                case '\'': return '&apos;';
-                case '"': return '&quot;';
-                default: return c;
-            }
-        });
-    }
+  private escapeXml(unsafe: string): string {
+    return unsafe.replace(/[<>&'"]/g, (c) => {
+      switch (c) {
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '&': return '&amp;';
+        case '\'': return '&apos;';
+        case '"': return '&quot;';
+        default: return c;
+      }
+    });
+  }
 
-    private formatDuration(seconds: number): string {
-        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-        return `${h}:${m}:${s}`;
-    }
+  private formatDuration(seconds: number): string {
+    const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  }
 }

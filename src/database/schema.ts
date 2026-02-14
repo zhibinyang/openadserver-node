@@ -97,6 +97,7 @@ export const creatives = pgTable('creatives', {
     creative_type: integer('creative_type').default(CreativeType.BANNER),
     width: integer('width').default(0),
     height: integer('height').default(0),
+    duration: integer('duration'), // Video duration in seconds
 
     // Status
     status: integer('status').default(Status.ACTIVE),

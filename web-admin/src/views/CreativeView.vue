@@ -13,6 +13,7 @@ const newCreative = ref({
     video_url: '',
     width: 0,
     height: 0,
+    duration: 0,
     creative_type: 1, // Banner
     status: 1
 });
@@ -36,7 +37,7 @@ const create = async () => {
         return;
     }
     await api.createCreative(newCreative.value);
-    newCreative.value = { title: '', campaign_id: null, landing_url: '', image_url: '', video_url: '', width: 0, height: 0, creative_type: 1, status: 1 };
+    newCreative.value = { title: '', campaign_id: null, landing_url: '', image_url: '', video_url: '', width: 0, height: 0, duration: 0, creative_type: 1, status: 1 };
     loadData();
 };
 
@@ -111,6 +112,10 @@ onMounted(loadData);
                 <label>Height</label>
                 <input v-model.number="newCreative.height" type="number" />
              </div>
+             <div style="flex: 1;" v-if="newCreative.creative_type === 3">
+                <label>Duration (s)</label>
+                <input v-model.number="newCreative.duration" type="number" />
+             </div>
         </div>
         <button class="btn btn-primary" @click="create">Create</button>
       </div>
@@ -147,14 +152,21 @@ onMounted(loadData);
                     {{ item.creative_type === 1 ? 'Banner' : item.creative_type === 2 ? 'Native' : 'Video' }}
                 </span>
             </td>
+
             <td>
-                <div v-if="item.isEditing" style="display: flex; gap: 5px;">
-                    <input v-model.number="item.width" type="number" style="width: 60px;" placeholder="W" />
-                    <span>x</span>
-                    <input v-model.number="item.height" type="number" style="width: 60px;" placeholder="H" />
+                <div v-if="item.isEditing" style="display: flex; gap: 5px; flex-direction: column;">
+                    <div style="display: flex; gap: 5px;">
+                        <input v-model.number="item.width" type="number" style="width: 60px;" placeholder="W" />
+                        <span>x</span>
+                        <input v-model.number="item.height" type="number" style="width: 60px;" placeholder="H" />
+                    </div>
+                    <div v-if="item.creative_type === 3">
+                        <input v-model.number="item.duration" type="number" style="width: 60px;" placeholder="Sec" /> s
+                    </div>
                 </div>
                 <span v-else>
                     {{ item.width }} x {{ item.height }}
+                    <span v-if="item.creative_type === 3 && item.duration"> ({{ item.duration }}s)</span>
                 </span>
             </td>
             <td>

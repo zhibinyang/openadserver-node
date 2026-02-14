@@ -110,6 +110,11 @@ export class CreateCreativeDto {
     @Type(() => Number)
     height?: number;
 
+    @IsNumber()
+    @IsOptional()
+    @Type(() => Number)
+    duration?: number; // Seconds
+
     @IsEnum(Status)
     @IsOptional()
     @Type(() => Number)
@@ -178,6 +183,7 @@ export class UpdateCreativeDto {
     creative_type?: CreativeType;
     @IsNumber() @IsOptional() @Type(() => Number) width?: number;
     @IsNumber() @IsOptional() @Type(() => Number) height?: number;
+    @IsNumber() @IsOptional() @Type(() => Number) duration?: number;
     @IsEnum(Status) @IsOptional() @Type(() => Number) status?: Status;
     @IsNumber() @IsOptional() @Type(() => Number) quality_score?: number;
 }
