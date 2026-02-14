@@ -68,6 +68,7 @@ export class EngineController {
                 video_duration: c.metadata?.video_duration || null,
                 bid_type: c.bid_type,
                 ecpm: c.ecpm || null,
+                page_context: context.page_context || null,
             });
         });
 
@@ -86,6 +87,38 @@ export class EngineController {
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, query.slot_id);
 
+        // Log REQUEST event for each candidate (same as /ad/get)
+        candidates.forEach(c => {
+            c.click_id = randomUUID();
+            this.analyticsService.trackEvent({
+                request_id: requestId,
+                click_id: c.click_id,
+                campaign_id: c.campaign_id,
+                creative_id: c.creative_id,
+                user_id: context.user_id,
+                device: context.device,
+                browser: context.browser,
+                event_type: EventType.REQUEST,
+                event_time: Date.now(),
+                cost: 0,
+                ip: context.ip,
+                country: context.country,
+                city: context.city,
+                bid: c.bid,
+                price: c.bid,
+                os: context.os,
+                referer: context.referer,
+                slot_type: context.slot_type,
+                slot_id: context.slot_id,
+                banner_width: c.width || null,
+                banner_height: c.height || null,
+                video_duration: c.metadata?.video_duration || null,
+                bid_type: c.bid_type,
+                ecpm: c.ecpm || null,
+                page_context: context.page_context || null,
+            });
+        });
+
         const builder = this.responseFactory.getBuilder('vast');
         const xml = await builder.build(candidates, context, requestId);
 
@@ -103,6 +136,38 @@ export class EngineController {
         const context = this.buildContext(body, req);
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, body.slot_id);
+
+        // Log REQUEST event for each candidate (same as /ad/get)
+        candidates.forEach(c => {
+            c.click_id = randomUUID();
+            this.analyticsService.trackEvent({
+                request_id: requestId,
+                click_id: c.click_id,
+                campaign_id: c.campaign_id,
+                creative_id: c.creative_id,
+                user_id: context.user_id,
+                device: context.device,
+                browser: context.browser,
+                event_type: EventType.REQUEST,
+                event_time: Date.now(),
+                cost: 0,
+                ip: context.ip,
+                country: context.country,
+                city: context.city,
+                bid: c.bid,
+                price: c.bid,
+                os: context.os,
+                referer: context.referer,
+                slot_type: context.slot_type,
+                slot_id: context.slot_id,
+                banner_width: c.width || null,
+                banner_height: c.height || null,
+                video_duration: c.metadata?.video_duration || null,
+                bid_type: c.bid_type,
+                ecpm: c.ecpm || null,
+                page_context: context.page_context || null,
+            });
+        });
 
         const builder = this.responseFactory.getBuilder('vast');
         const xml = await builder.build(candidates, context, requestId);
@@ -164,6 +229,7 @@ export class EngineController {
             slot_type: dto.slot_type,
             slot_id: dto.slot_id,
             referer: (req.headers['referer'] || req.headers['referrer'] || '') as string,
+            page_context: dto.page_context,
         };
 
         // 4. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided

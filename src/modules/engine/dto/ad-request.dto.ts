@@ -60,6 +60,10 @@ export class AdRequestDto {
     @IsOptional()
     interests?: string[];
 
+    @IsString()
+    @IsOptional()
+    page_context?: string; // Page context info from the requesting page
+
     @IsNumber()
     @IsOptional()
     @Type(() => Number)

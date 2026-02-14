@@ -29,6 +29,13 @@
       "when": 1770984211683,
       "tag": "0003_add_bid_type_ecpm",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771027692718,
+      "tag": "0004_add_page_context",
+      "breakpoints": true
     }
   ]
 }

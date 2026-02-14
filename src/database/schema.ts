@@ -176,6 +176,7 @@ export const ad_events = pgTable('ad_events', {
     slot_id: varchar('slot_id', { length: 255 }),
     bid_type: integer('bid_type'),                     // BidType enum (1=CPM, 2=CPC, 3=CPA, 4=OCPM)
     ecpm: numeric('ecpm', { precision: 12, scale: 6 }),
+    page_context: varchar('page_context', { length: 2048 }),
 }, (table) => ({
     // Create index on click_id for fast lookups
     clickIdIdx: index('ad_events_click_id_idx').on(table.click_id),

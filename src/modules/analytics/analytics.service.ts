@@ -73,6 +73,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 string slot_id = 23;
                 int32 bid_type = 24;
                 double ecpm = 25;
+                string page_context = 26;
             }
         `;
         const { parse } = protobuf;
@@ -158,6 +159,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
             slot_id: event.slot_id || null,
             bid_type: event.bid_type || null,
             ecpm: event.ecpm != null ? event.ecpm.toString() : null,
+            page_context: event.page_context || null,
         });
     }
 
@@ -213,6 +215,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 slot_id: row.slot_id || '',
                 bid_type: row.bid_type || 0,
                 ecpm: row.ecpm || 0.0,
+                page_context: row.page_context || '',
             };
 
             // Verify message

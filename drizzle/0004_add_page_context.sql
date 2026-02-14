@@ -1,0 +1,1 @@
+ALTER TABLE "ad_events" ADD COLUMN "page_context" varchar(2048);

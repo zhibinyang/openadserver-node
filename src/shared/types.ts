@@ -115,6 +115,7 @@ export interface UserContext {
     slot_type?: number;  // CreativeType enum
     slot_id?: string;
     referer?: string;
+    page_context?: string;
 
     // Features (for ML)
     age?: number;
