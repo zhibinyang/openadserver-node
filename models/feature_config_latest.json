@@ -1,0 +1,112 @@
+{
+    "sparse_features": [
+        "user_id",
+        "campaign_id",
+        "creative_id",
+        "slot_id",
+        "device",
+        "browser",
+        "os",
+        "country",
+        "city",
+        "page_context",
+        "bid_type"
+    ],
+    "dense_features": [
+        "banner_width",
+        "banner_height",
+        "bid",
+        "req_hour",
+        "req_dow"
+    ],
+    "sparse_vocab_sizes": [
+        4,
+        3,
+        3,
+        3,
+        3,
+        4,
+        3,
+        3,
+        3,
+        7,
+        3
+    ],
+    "dense_means": [
+        728.0,
+        90.0,
+        18.0,
+        9.6,
+        6.371428571428571
+    ],
+    "dense_stds": [
+        1.0,
+        1.0,
+        4.0,
+        6.410705332265933,
+        0.4831867007225075
+    ],
+    "label_encoders": {
+        "user_id": [
+            "",
+            "0e44b19d-17a0-4330-a512-25978bd849bd",
+            "<UNK>",
+            "user_12345"
+        ],
+        "campaign_id": [
+            "1",
+            "2",
+            "<UNK>"
+        ],
+        "creative_id": [
+            "1",
+            "3",
+            "<UNK>"
+        ],
+        "slot_id": [
+            "123",
+            "<UNK>",
+            "global-footer-ad"
+        ],
+        "device": [
+            "<UNK>",
+            "Apple Macintosh",
+            "Apple iPhone"
+        ],
+        "browser": [
+            "",
+            "<UNK>",
+            "Chrome",
+            "Mobile Chrome"
+        ],
+        "os": [
+            "<UNK>",
+            "iOS",
+            "macOS"
+        ],
+        "country": [
+            "<UNK>",
+            "SG",
+            "US"
+        ],
+        "city": [
+            "",
+            "<UNK>",
+            "Singapore"
+        ],
+        "page_context": [
+            "",
+            "<UNK>",
+            "adtech-sandbox-2026",
+            "expo-vendure-adtech-storefront",
+            "getting-started-n8n-nodejs-gotchas",
+            "qwik-vendure-web-storefront",
+            "unknown"
+        ],
+        "bid_type": [
+            "1",
+            "2",
+            "<UNK>"
+        ]
+    }
+}

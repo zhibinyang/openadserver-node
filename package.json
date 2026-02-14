@@ -37,7 +37,7 @@
     "fastify": "^5.7.4",
     "ioredis": "^5.9.2",
     "maxmind": "^5.0.5",
-    "onnxruntime-node": "^1.16.0",
+    "onnxruntime-node": "1.16.0",
     "pg": "^8.18.0",
     "protobufjs": "^7.5.0",
     "reflect-metadata": "^0.2.2",

@@ -12,7 +12,8 @@ services:
       - REDIS_PORT=6379
       - DATABASE_URL=postgresql://oas:oas_password@postgres:5432/oas
       - BASE_URL=https://ads.zhibinyang.net
-      - MODEL_PATH=/usr/src/app/models/lr_ctr.onnx
+      - MODEL_PATH=/usr/src/app/models/lr_model_latest.onnx
+      - FEATURE_CONFIG_PATH=/usr/src/app/models/feature_config_latest.json
       - GEO_DB_PATH=/usr/src/app/libs/geo/GeoLite2-City.mmdb
       - GOOGLE_CLOUD_PROJECT=node-quest-zbyang
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/credential.json
