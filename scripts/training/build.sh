@@ -1,0 +1,1 @@
+gcloud run jobs deploy pctr-trainer --tasks 1 --region us-central1   --memory 4Gi   --cpu 2   --set-env-vars GOOGLE_CLOUD_PROJECT=node-quest-zbyang,BQ_DATASET=analytics,BQ_TABLE=ad_events,GCS_BUCKET_NAME=openadserver-training-models --command "python3" --args "main.py"
