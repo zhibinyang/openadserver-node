@@ -34,7 +34,7 @@ services:
     networks:
       - openadserver-network
 
-  # PostgreSQL Database
+# PostgreSQL Database (CDC Enabled)
   postgres:
     image: postgres:15-alpine
     environment:
@@ -43,10 +43,18 @@ services:
       POSTGRES_DB: oas
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Add init script capability if needed later
-      # - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # 建议新建一个 init-cdc.sql 放到这个目录下，用于自动配置复制权限
+      - ./scripts/init-cdc.sql:/docker-entrypoint-initdb.d/init-cdc.sql:ro
     ports:
       - "5432:5432"
+    # 核心改动：通过 command 启动参数开启逻辑流复制
+    command: [
+      "postgres",
+      "-c", "wal_level=logical",           # 必须：开启逻辑日志
+      "-c", "max_replication_slots=5",    # 必须：允许 Datastream 占用槽位
+      "-c", "max_wal_senders=5",         # 必须：允许发送流数据
+      "-c", "max_connections=100"         # 确保连接数充足
+    ]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oas -d oas"]
       interval: 10s
