@@ -1,9 +1,12 @@
 -- Create the dataset if it doesn't exist
-CREATE SCHEMA IF NOT EXISTS `analytics`;
+CREATE SCHEMA IF NOT EXISTS `analytics`
+OPTIONS(
+  location = 'us-central1'
+);
 
 -- Create the ad_events table
 CREATE TABLE IF NOT EXISTS `analytics.ad_events` (
-  request_id STRING NOT NULL,
+  request_id STRING,
   click_id STRING,
   campaign_id INT64,
   creative_id INT64,

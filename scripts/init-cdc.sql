@@ -10,3 +10,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO datastream_u
 -- 3. 创建发布（Publication），包含所有表
 -- Datastream 会监听这个发布来获取变更
 CREATE PUBLICATION ds_publication FOR ALL TABLES;
+
+-- 4. 创建逻辑复制槽
+SELECT pg_create_logical_replication_slot('ds_slot', 'pgoutput');
