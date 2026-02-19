@@ -115,6 +115,8 @@ export interface UserContext {
     // Slot & Referer
     slot_type?: number;  // CreativeType enum
     slot_id?: string;
+    slot_width?: number;
+    slot_height?: number;
     referer?: string;
     page_context?: string;
 

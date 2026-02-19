@@ -25,9 +25,17 @@ export class FilterService implements PipelineStep {
             const before = candidates.length;
             candidates = candidates.filter(c => c.creative_type === context.slot_type);
             if (candidates.length < before) {
-                this.logger.log(
-                    `Slot type filter: ${before} -> ${candidates.length} (slot_type=${context.slot_type})`
-                );
+                this.logger.log(`Slot type filter: ${before} -> ${candidates.length} (slot_type=${context.slot_type})`);
+            }
+            if (candidates.length === 0) return [];
+        }
+
+        // 0.5 Filter by dimensions (width & height must match if provided)
+        if (context.slot_width && context.slot_height) {
+            const before = candidates.length;
+            candidates = candidates.filter(c => c.width === context.slot_width && c.height === context.slot_height);
+            if (candidates.length < before) {
+                this.logger.log(`Dimension filter: ${before} -> ${candidates.length} (requested ${context.slot_width}x${context.slot_height})`);
             }
             if (candidates.length === 0) return [];
         }
