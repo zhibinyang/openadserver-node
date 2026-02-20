@@ -22,21 +22,19 @@ REGION = "us-central1"
 # Feature Definitions
 # Must match what's in the SQL
 SPARSE_FEATURES = [
-    "user_id", "campaign_id", "creative_id", "slot_id", 
-    "device", "browser", "os", "country", "city", 
-    "page_context", "bid_type"
+    "campaign_id", "creative_id", "slot_id","req_hour", "req_dow", "banner_size",
+    "device", "browser", "os", "country"
 ]
 DENSE_FEATURES = [
-    "banner_width", "banner_height", "bid", 
-    "req_hour", "req_dow"
+    "bid",
 ]
 LABEL_COL = "label"
 
 # Model Hyperparameters
 # DeepFM specific
-EMBEDDING_DIM = 8        # Dimension for FM and Deep part inputs
-DNN_HIDDEN_UNITS = [64, 32]
-DNN_DROPOUT = 0.5
+EMBEDDING_DIM = 16        # Dimension for FM and Deep part inputs
+DNN_HIDDEN_UNITS = [128, 64, 32]
+DNN_DROPOUT = 0.15
 LEARNING_RATE = 0.001
 BATCH_SIZE = 1024
 EPOCHS = 5
@@ -148,19 +146,21 @@ def load_data_from_bq():
     
     # Use the same SQL logic
     query = """
-    WITH 
+    WITH
     base_requests AS (
       SELECT
         click_id, user_id, campaign_id, creative_id, slot_id, page_context,
-        device, browser, os, country, city, banner_width, banner_height, bid_type, bid, event_time,
+        device, browser, os, country, city,
+        CONCAT(CAST(banner_width AS STRING), 'x', CAST(banner_height AS STRING)) AS banner_size,
+        bid_type, bid, event_time,
         EXTRACT(HOUR FROM event_time) AS req_hour,
         EXTRACT(DAYOFWEEK FROM event_time) AS req_dow,
-        CASE 
-          WHEN event_time < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 6 HOUR) 
-               AND event_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) THEN 'TRAIN'
-          WHEN event_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 6 HOUR) 
-               AND event_time < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 0 HOUR) THEN 'VALIDATE'
-          ELSE 'IGNORE' 
+        CASE
+          WHEN event_time < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 6 HOUR)
+               AND event_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 14 DAY) THEN 'TRAIN'
+          WHEN event_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 6 HOUR)
+               AND event_time < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR) THEN 'VALIDATE'
+          ELSE 'IGNORE'
         END AS data_split
       FROM `{dataset}.{table}`
       WHERE event_type = 9 AND slot_type = 1 AND campaign_id > 0
