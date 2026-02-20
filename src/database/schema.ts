@@ -140,6 +140,18 @@ export const targetingRulesRelations = relations(targeting_rules, ({ one }) => (
     }),
 }));
 
+// --- AUDIENCE INTERESTS ---
+export const audience_interests = pgTable('audience_interests', {
+    id: serial('id').primaryKey(),
+    code: varchar('code', { length: 100 }).notNull().unique(), // e.g. 'tech', 'sports'
+    name: varchar('name', { length: 255 }).notNull(), // e.g. 'Technology', 'Sports & Fitness'
+    description: text('description'),
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // --- AD EVENTS ---
 export const ad_events = pgTable('ad_events', {
     id: serial('id').primaryKey(),

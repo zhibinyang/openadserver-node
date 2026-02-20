@@ -11,6 +11,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 export type CachedCampaign = typeof schema.campaigns.$inferSelect;
 export type CachedCreative = typeof schema.creatives.$inferSelect;
 export type CachedRule = typeof schema.targeting_rules.$inferSelect;
+export type CachedInterest = typeof schema.audience_interests.$inferSelect;
 
 @Injectable()
 export class CacheService implements OnModuleInit {
@@ -20,6 +21,7 @@ export class CacheService implements OnModuleInit {
     private campaigns: Map<number, CachedCampaign> = new Map();
     private creatives: Map<number, CachedCreative[]> = new Map(); // Grouped by campaign_id
     private rules: Map<number, CachedRule[]> = new Map(); // Grouped by campaign_id
+    private interests: Map<string, CachedInterest> = new Map(); // Keyed by code
 
     // Fast access indices
     private allCreatives: CachedCreative[] = [];
@@ -63,10 +65,16 @@ export class CacheService implements OnModuleInit {
             // 3. Fetch Targeting Rules
             const rulesData = await this.db.query.targeting_rules.findMany();
 
-            // 4. Rebuild Maps (Atomic replacement typical in other languages, here JS is single threaded so safe-ish)
+            // 4. Fetch Audience Interests (Active only)
+            const interestsData = await this.db.query.audience_interests.findMany({
+                where: eq(schema.audience_interests.status, Status.ACTIVE),
+            });
+
+            // 5. Rebuild Maps (Atomic replacement typical in other languages, here JS is single threaded so safe-ish)
             const newCampaigns = new Map<number, CachedCampaign>();
             const newCreatives = new Map<number, CachedCreative[]>();
             const newRules = new Map<number, CachedRule[]>();
+            const newInterests = new Map<string, CachedInterest>();
 
             // Process Campaigns
             for (const campaign of campaignsData) {
@@ -96,10 +104,16 @@ export class CacheService implements OnModuleInit {
                 }
             }
 
+            // Process Interests
+            for (const interest of interestsData) {
+                newInterests.set(interest.code, interest);
+            }
+
             // Update State
             this.campaigns = newCampaigns;
             this.creatives = newCreatives;
             this.rules = newRules;
+            this.interests = newInterests;
             this.allCreatives = creativesData.filter(c => newCampaigns.has(Number(c.campaign_id)));
 
             // OPTIMIZATION 2: Build slot_id index
@@ -137,6 +151,14 @@ export class CacheService implements OnModuleInit {
 
     getAllCreatives(): CachedCreative[] {
         return this.allCreatives;
+    }
+
+    getAllInterests(): CachedInterest[] {
+        return Array.from(this.interests.values());
+    }
+
+    getInterest(code: string): CachedInterest | undefined {
+        return this.interests.get(code);
     }
 
     /**

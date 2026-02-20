@@ -171,6 +171,13 @@ export class AdminService {
             .returning();
     }
 
+    // --- Audience Interests ---
+    async getInterests() {
+        return this.db.query.audience_interests.findMany({
+            orderBy: [desc(schema.audience_interests.id)],
+        });
+    }
+
     // --- Ad Events ---
     async getAdEvents(limit: number = 100) {
         return this.db.query.ad_events.findMany({

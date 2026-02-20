@@ -102,4 +102,10 @@ export class AdminController {
         const limitNum = limit ? Math.min(Number(limit), 1000) : 100; // Default 100, max 1000
         return this.adminService.getAdEvents(limitNum);
     }
+
+    // --- Audience Interests ---
+    @Get('interests')
+    getInterests() {
+        return this.adminService.getInterests();
+    }
 }

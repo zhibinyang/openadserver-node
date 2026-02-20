@@ -34,13 +34,17 @@ export class TargetingMatcher {
             case 'device':
                 matched = this.matchDevice(value, context);
                 break;
+            case 'demographics':
+                matched = this.matchDemographics(value, context);
+                break;
             case 'combined': {
                 // Both geo and device must pass (AND)
                 const hasGeo = value.countries || value.cities;
                 const hasDevice = value.os || value.browser || value.device;
                 const geoOk = hasGeo ? this.matchGeo(value, context) : true;
                 const deviceOk = hasDevice ? this.matchDevice(value, context) : true;
-                matched = geoOk && deviceOk;
+                const demoOk = value.interests ? this.matchDemographics(value, context) : true;
+                matched = geoOk && deviceOk && demoOk;
                 break;
             }
             default:
@@ -98,5 +102,23 @@ export class TargetingMatcher {
         }
 
         return matched;
+    }
+
+    private matchDemographics(value: any, context: UserContext): boolean {
+        // Expected value: { interests: ["tech", "sports"] }
+        // If the rule specifies interests, the user MUST have at least ONE overlapping interest
+        if (value.interests && Array.isArray(value.interests)) {
+            if (!context.interests || context.interests.length === 0) {
+                return false; // User has no interests, but rule requires some
+            }
+            // Check for intersection
+            const hasCommonInterest = value.interests.some((interest: string) =>
+                context.interests?.map(i => i.toLowerCase()).includes(interest.toLowerCase())
+            );
+            if (!hasCommonInterest) {
+                return false;
+            }
+        }
+        return true;
     }
 }
