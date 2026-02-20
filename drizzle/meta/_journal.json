@@ -43,6 +43,13 @@
       "when": 1771033224079,
       "tag": "0005_add_creative_duration",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771574347329,
+      "tag": "0006_add_audience_interests",
+      "breakpoints": true
     }
   ]
 }
