@@ -12,6 +12,7 @@ interface FeatureConfig {
     dense_means: number[];
     dense_stds: number[];
     label_encoders: Record<string, string[]>;
+    model_type?: string;
 }
 
 @Injectable()
@@ -24,36 +25,83 @@ export class PredictionService implements PipelineStep, OnModuleInit {
     private session: any; // Use any to avoid TS issues with onnxruntime-node
     private featureConfig: FeatureConfig | null = null;
 
-    private readonly MODEL_PATH = process.env.MODEL_PATH || path.join(process.cwd(), 'models', 'lr_model_latest.onnx');
+    private modelPath = process.env.MODEL_PATH || '';
     private readonly CONFIG_PATH = process.env.FEATURE_CONFIG_PATH || path.join(process.cwd(), 'models', 'feature_config_latest.json');
 
     private readonly logger = new Logger(PredictionService.name);
 
     async onModuleInit() {
         try {
-            // dynamic require to avoid build issues if lib is missing
-            const ort = require('onnxruntime-node');
-
-            // 1. Load Feature Config
-            if (fs.existsSync(this.CONFIG_PATH)) {
-                const rawConfig = fs.readFileSync(this.CONFIG_PATH, 'utf-8');
-                this.featureConfig = JSON.parse(rawConfig);
-                this.logger.log(`[PredictionService] Loaded feature config from ${this.CONFIG_PATH}`);
-            } else {
-                this.logger.warn(`[PredictionService] Feature config not found at ${this.CONFIG_PATH}. Using heuristic fallback.`);
-            }
-
-            // 2. Load ONNX Model
-            if (fs.existsSync(this.MODEL_PATH)) {
-                this.session = await ort.InferenceSession.create(this.MODEL_PATH);
-                this.logger.log(`[PredictionService] Loaded ONNX model from ${this.MODEL_PATH}`);
-            } else {
-                this.logger.warn(`[PredictionService] Model not found at ${this.MODEL_PATH}. Using heuristic fallback.`);
-            }
-
+            await this.loadConfigAndModel();
+            this.setupWatchers();
         } catch (e) {
             this.logger.error(`[PredictionService] Failed to initialize:`, e);
         }
+    }
+
+    private async loadConfigAndModel() {
+        // 1. Load Feature Config
+        if (fs.existsSync(this.CONFIG_PATH)) {
+            const rawConfig = fs.readFileSync(this.CONFIG_PATH, 'utf-8');
+            this.featureConfig = JSON.parse(rawConfig);
+            this.logger.log(`[PredictionService] Loaded feature config from ${this.CONFIG_PATH}`);
+        } else {
+            this.logger.warn(`[PredictionService] Feature config not found at ${this.CONFIG_PATH}. Using heuristic fallback.`);
+        }
+
+        const oldModelPath = this.modelPath;
+        // Determine MODEL_PATH based on model_type if not overridden by env
+        if (!process.env.MODEL_PATH) {
+            const modelType = this.featureConfig?.model_type || 'lr';
+            this.modelPath = path.join(process.cwd(), 'models', `${modelType}_model_latest.onnx`);
+        } else {
+            this.modelPath = process.env.MODEL_PATH;
+        }
+
+        // Switch model watcher if path changed
+        if (oldModelPath !== this.modelPath && oldModelPath) {
+            fs.unwatchFile(oldModelPath);
+            this.watchModelFile(); // Re-watch new path
+        }
+
+        await this.loadModel();
+    }
+
+    private async loadModel() {
+        const ort = require('onnxruntime-node');
+        if (fs.existsSync(this.modelPath)) {
+            try {
+                this.session = await ort.InferenceSession.create(this.modelPath);
+                this.logger.log(`[PredictionService] Loaded ONNX model from ${this.modelPath} (Type: ${this.featureConfig?.model_type || 'lr'})`);
+            } catch (err) {
+                this.logger.error(`[PredictionService] Failed to load ONNX model:`, err);
+            }
+        } else {
+            this.logger.warn(`[PredictionService] Model not found at ${this.modelPath}. Using heuristic fallback.`);
+        }
+    }
+
+    private setupWatchers() {
+        // Watch Config
+        fs.watchFile(this.CONFIG_PATH, { interval: 5000 }, async (curr, prev) => {
+            if (curr.mtimeMs !== prev.mtimeMs) {
+                this.logger.log(`[PredictionService] Feature config changed, reloading...`);
+                await this.loadConfigAndModel();
+            }
+        });
+
+        // Watch Model
+        this.watchModelFile();
+    }
+
+    private watchModelFile() {
+        if (!this.modelPath) return;
+        fs.watchFile(this.modelPath, { interval: 5000 }, async (curr, prev) => {
+            if (curr.mtimeMs !== prev.mtimeMs) {
+                this.logger.log(`[PredictionService] Model file changed, reloading...`);
+                await this.loadModel();
+            }
+        });
     }
 
     async execute(
@@ -78,6 +126,11 @@ export class PredictionService implements PipelineStep, OnModuleInit {
                 sparse_inputs: sparseTensor, // Model input name matching export
                 dense_inputs: denseTensor,
             };
+
+            if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_PREDICTION) {
+                this.logger.debug(`[Inference Feeds] Sparse: [${sparseTensor.data.slice(0, 50).join(', ')}...]`);
+                this.logger.debug(`[Inference Feeds] Dense:  [${denseTensor.data.slice(0, 10).join(', ')}...]`);
+            }
 
             const results = await this.session.run(feeds);
             // Output name is 'pctr' from export script
@@ -137,49 +190,57 @@ export class PredictionService implements PipelineStep, OnModuleInit {
         const reqHour = now.getHours(); // 0-23
         const reqDow = now.getDay() + 1; // JS(0-6) -> BQ(1-7)
 
+        const getValue = (feat: string, c: AdCandidate) => {
+            switch (feat) {
+                case 'user_id': return context.user_id;
+                case 'campaign_id': return c.campaign_id;
+                case 'creative_id': return c.creative_id;
+                case 'slot_id': return context.slot_id;
+                case 'req_hour': return reqHour;
+                case 'req_dow': return reqDow;
+                case 'banner_size': return `${c.width || 0}x${c.height || 0}`;
+                case 'device': return context.device;
+                case 'browser': return context.browser;
+                case 'os': return context.os;
+                case 'country': return context.country;
+                case 'city': return context.city;
+                case 'page_context': return context.page_context;
+                case 'bid_type': return c.bid_type;
+                case 'banner_width': return c.width || 0;
+                case 'banner_height': return c.height || 0;
+                case 'bid': return c.bid || 0;
+                default: return 0;
+            }
+        };
+
         for (let i = 0; i < batchSize; i++) {
             const c = candidates[i];
             const offsetSparse = i * numSparse;
             const offsetDense = i * numDense;
 
-            // --- Sparse Features ---
-            // Mapping logic: value -> string -> index in label_encoders
-            // Config keys: "user_id", "campaign_id", ...
+            const rawSparse: Record<string, any> = {};
+            const rawDense: Record<string, any> = {};
 
-            // 1. user_id
-            sparseData[offsetSparse + 0] = this.encode(config, 'user_id', context.user_id);
-            // 2. campaign_id
-            sparseData[offsetSparse + 1] = this.encode(config, 'campaign_id', c.campaign_id);
-            // 3. creative_id
-            sparseData[offsetSparse + 2] = this.encode(config, 'creative_id', c.creative_id);
-            // 4. slot_id
-            sparseData[offsetSparse + 3] = this.encode(config, 'slot_id', context.slot_id);
-            // 5. device
-            sparseData[offsetSparse + 4] = this.encode(config, 'device', context.device);
-            // 6. browser
-            sparseData[offsetSparse + 5] = this.encode(config, 'browser', context.browser);
-            // 7. os
-            sparseData[offsetSparse + 6] = this.encode(config, 'os', context.os);
-            // 8. country
-            sparseData[offsetSparse + 7] = this.encode(config, 'country', context.country);
-            // 9. city
-            sparseData[offsetSparse + 8] = this.encode(config, 'city', context.city);
-            // 10. page_context
-            sparseData[offsetSparse + 9] = this.encode(config, 'page_context', context.page_context);
-            // 11. bid_type
-            sparseData[offsetSparse + 10] = this.encode(config, 'bid_type', c.bid_type);
+            // --- Sparse Features ---
+            for (let j = 0; j < numSparse; j++) {
+                const feat = config.sparse_features[j];
+                const val = getValue(feat, c);
+                if (i === 0) rawSparse[feat] = val;
+                sparseData[offsetSparse + j] = this.encode(config, feat, val);
+            }
 
             // --- Dense Features ---
-            // 1. banner_width
-            denseData[offsetDense + 0] = this.scale(config, 0, c.width || 0);
-            // 2. banner_height
-            denseData[offsetDense + 1] = this.scale(config, 1, c.height || 0);
-            // 3. bid
-            denseData[offsetDense + 2] = this.scale(config, 2, c.bid || 0);
-            // 4. req_hour
-            denseData[offsetDense + 3] = this.scale(config, 3, reqHour);
-            // 5. req_dow
-            denseData[offsetDense + 4] = this.scale(config, 4, reqDow);
+            for (let j = 0; j < numDense; j++) {
+                const feat = config.dense_features[j];
+                const val = getValue(feat, c) as number;
+                if (i === 0) rawDense[feat] = val;
+                denseData[offsetDense + j] = this.scale(config, j, val);
+            }
+
+            if (i === 0 && (process.env.NODE_ENV !== 'production' || process.env.DEBUG_PREDICTION)) {
+                this.logger.debug(`[Raw Features] Candidate 0 Sparse: ${JSON.stringify(rawSparse)}`);
+                this.logger.debug(`[Raw Features] Candidate 0 Dense: ${JSON.stringify(rawDense)}`);
+            }
         }
 
         const sparseTensor = new ort.Tensor('int64', sparseData, [batchSize, numSparse]);
