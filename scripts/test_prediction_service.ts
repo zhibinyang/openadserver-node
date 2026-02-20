@@ -8,32 +8,39 @@ async function main() {
 
     // Mock Context
     const context: UserContext = {
-        user_id: 'test_user_123',
-        os: 'ios',
-        country: 'US',
+        user_id: '0b627e73-7427-4405-9c37-48e0b4403bb8',
+        slot_id: 'slot_footer_fixed',
+        device: 'macbook',
+        browser: 'safari',
+        os: 'macos',
+        country: 'CN',
+        city: 'Beijing',
         app_id: 'app_test',
         ip: '127.0.0.1',
-        age: 25,
     };
 
     // Mock Candidates
     const candidates: AdCandidate[] = [
         {
-            campaign_id: 101,
-            creative_id: 201,
-            advertiser_id: 301,
-            bid: 1.5,
+            campaign_id: 1,
+            creative_id: 1,
+            advertiser_id: 1,
+            bid: 20.0,
             bid_type: BidType.CPM,
             creative_type: CreativeType.BANNER,
+            width: 728,
+            height: 90,
             landing_url: 'http://example.com'
         },
         {
-            campaign_id: 102,
-            creative_id: 202,
-            advertiser_id: 302,
-            bid: 2.0,
-            bid_type: BidType.CPC,
-            creative_type: CreativeType.VIDEO,
+            campaign_id: 1,
+            creative_id: 1,
+            advertiser_id: 1,
+            bid: 30.0,
+            bid_type: BidType.CPM,
+            creative_type: CreativeType.BANNER,
+            width: 728,
+            height: 90,
             landing_url: 'http://example.com'
         }
     ];
