@@ -61,7 +61,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                 const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=cpc&utm_campaign=${c.campaign_id}`;
 
                 // External click-through URL
-                const impCost = c.bid_type === 1 || c.bid_type === 4 ? c.bid / 1000 : 0; // CPM/OCPM = 1/4
+                const impCost = c.bid_type === 1 ? c.bid / 1000 : (c.bid_type === 4 ? (c.ecpm || 0) / 1000 : 0); // CPM = 1, OCPM = 4
 
                 const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
                 const landingUrl = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
@@ -139,7 +139,7 @@ export class VastResponseBuilder implements AdResponseBuilder {
         const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=video`;
 
         // External click-through URL
-        const impCost = c.bid_type === 1 || c.bid_type === 4 ? c.bid / 1000 : 0; // CPM/OCPM = 1/4
+        const impCost = c.bid_type === 1 ? c.bid / 1000 : (c.bid_type === 4 ? (c.ecpm || 0) / 1000 : 0); // CPM = 1, OCPM = 4
         const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
 
         const clickThrough = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
