@@ -118,6 +118,10 @@ export class PredictionService implements PipelineStep, OnModuleInit {
     ): Promise<AdCandidate[]> {
         const start = Date.now();
 
+        if (candidates.length === 0) {
+            return candidates;
+        }
+
         // If models or config not loaded, fallback to heuristics
         if (!this.sessionCtr || !this.sessionCvr || !this.featureConfig) {
             const results = this.heuristicPredict(candidates);
