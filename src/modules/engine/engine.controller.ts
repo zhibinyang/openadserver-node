@@ -9,6 +9,8 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ResponseBuilderFactory } from './services/response-builder.service';
 import { UAParser } from 'ua-parser-js';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { CacheService } from './services/cache.service';
+import { RedisService } from '../../shared/redis/redis.service';
 
 @Controller('ad')
 export class EngineController {
@@ -19,6 +21,8 @@ export class EngineController {
         private readonly responseFactory: ResponseBuilderFactory,
         private readonly geoIpService: GeoIpService,
         private readonly analyticsService: AnalyticsService,
+        private readonly cacheService: CacheService,
+        private readonly redisService: RedisService,
     ) { }
 
     @Post('get')
@@ -29,6 +33,9 @@ export class EngineController {
         const requestId = randomUUID();
         const context = this.buildContext(body, req);
         const candidates = await this.adEngine.recommend(context, body.slot_id);
+
+        // Log winning campaign's current budget and spend asynchronously
+        this.logWinningCampaignPacing(candidates).catch(e => this.logger.warn(e));
 
         // Access AnalyticsService from module ref or inject it? Best to inject.
         // But for now, let's assume valid candidates are "Impressions" or at least "Bids".
@@ -89,6 +96,9 @@ export class EngineController {
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, query.slot_id);
 
+        // Log winning campaign's current budget and spend asynchronously
+        this.logWinningCampaignPacing(candidates).catch(e => this.logger.warn(e));
+
         // Log REQUEST event for each candidate (same as /ad/get)
         candidates.forEach(c => {
             c.click_id = randomUUID();
@@ -138,6 +148,9 @@ export class EngineController {
         const context = this.buildContext(body, req);
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, body.slot_id);
+
+        // Log winning campaign's current budget and spend asynchronously
+        this.logWinningCampaignPacing(candidates).catch(e => this.logger.warn(e));
 
         // Log REQUEST event for each candidate (same as /ad/get)
         candidates.forEach(c => {
@@ -279,5 +292,35 @@ export class EngineController {
         }
 
         return context;
+    }
+
+    private async logWinningCampaignPacing(candidates: any[]): Promise<void> {
+        if (!process.env.DEBUG_PREDICTION || candidates.length === 0) return;
+
+        try {
+            const winner = candidates[0];
+            const campaign = this.cacheService.getCampaign(winner.campaign_id);
+            if (!campaign) return;
+
+            const date = new Date().toISOString().split('T')[0];
+            const dailyKey = `budget:${winner.campaign_id}:${date}`;
+            const totalKey = `budget:total:${winner.campaign_id}`;
+
+            const pipeline = this.redisService.client.pipeline();
+            pipeline.hget(dailyKey, 'spent_today');
+            pipeline.hget(totalKey, 'spent_total');
+            const results = await pipeline.exec();
+
+            const spentToday = parseFloat((results?.[0]?.[1] as string) || '0');
+            const spentTotal = parseFloat((results?.[1]?.[1] as string) || '0');
+
+            this.logger.debug(
+                `[Winner Pacing] Campaign ${winner.campaign_id} ` +
+                `| Daily: $${spentToday.toFixed(2)} / $${campaign.budget_daily || 0} ` +
+                `| Total: $${spentTotal.toFixed(2)} / $${campaign.budget_total || 0}`
+            );
+        } catch (err) {
+            this.logger.warn(`Failed to log winning campaign pacing: ${err}`);
+        }
     }
 }
