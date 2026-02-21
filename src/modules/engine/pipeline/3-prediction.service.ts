@@ -21,25 +21,27 @@ export class PredictionService implements PipelineStep, OnModuleInit {
     private readonly DEFAULT_CTR = 0.015;
     private readonly DEFAULT_CVR = 0.005;
 
-    // ONNX Session
-    private session: any; // Use any to avoid TS issues with onnxruntime-node
+    // ONNX Sessions
+    private sessionCtr: any; // Use any to avoid TS issues with onnxruntime-node
+    private sessionCvr: any;
     private featureConfig: FeatureConfig | null = null;
 
-    private modelPath = process.env.MODEL_PATH || '';
+    private modelCtrPath = process.env.MODEL_CTR_PATH || path.join(process.cwd(), 'models', 'pctr_deepfm_model_latest.onnx');
+    private modelCvrPath = process.env.MODEL_CVR_PATH || path.join(process.cwd(), 'models', 'pcvr_deepfm_model_latest.onnx');
     private readonly CONFIG_PATH = process.env.FEATURE_CONFIG_PATH || path.join(process.cwd(), 'models', 'feature_config_latest.json');
 
     private readonly logger = new Logger(PredictionService.name);
 
     async onModuleInit() {
         try {
-            await this.loadConfigAndModel();
+            await this.loadConfigAndModels();
             this.setupWatchers();
         } catch (e) {
             this.logger.error(`[PredictionService] Failed to initialize:`, e);
         }
     }
 
-    private async loadConfigAndModel() {
+    private async loadConfigAndModels() {
         // 1. Load Feature Config
         if (fs.existsSync(this.CONFIG_PATH)) {
             const rawConfig = fs.readFileSync(this.CONFIG_PATH, 'utf-8');
@@ -49,35 +51,34 @@ export class PredictionService implements PipelineStep, OnModuleInit {
             this.logger.warn(`[PredictionService] Feature config not found at ${this.CONFIG_PATH}. Using heuristic fallback.`);
         }
 
-        const oldModelPath = this.modelPath;
-        // Determine MODEL_PATH based on model_type if not overridden by env
-        if (!process.env.MODEL_PATH) {
-            const modelType = this.featureConfig?.model_type || 'lr';
-            this.modelPath = path.join(process.cwd(), 'models', `${modelType}_model_latest.onnx`);
-        } else {
-            this.modelPath = process.env.MODEL_PATH;
-        }
-
-        // Switch model watcher if path changed
-        if (oldModelPath !== this.modelPath && oldModelPath) {
-            fs.unwatchFile(oldModelPath);
-            this.watchModelFile(); // Re-watch new path
-        }
-
-        await this.loadModel();
+        await this.loadModels();
     }
 
-    private async loadModel() {
+    private async loadModels() {
         const ort = require('onnxruntime-node');
-        if (fs.existsSync(this.modelPath)) {
+
+        // Load CTR Model
+        if (fs.existsSync(this.modelCtrPath)) {
             try {
-                this.session = await ort.InferenceSession.create(this.modelPath);
-                this.logger.log(`[PredictionService] Loaded ONNX model from ${this.modelPath} (Type: ${this.featureConfig?.model_type || 'lr'})`);
+                this.sessionCtr = await ort.InferenceSession.create(this.modelCtrPath);
+                this.logger.log(`[PredictionService] Loaded CTR ONNX model from ${this.modelCtrPath}`);
             } catch (err) {
-                this.logger.error(`[PredictionService] Failed to load ONNX model:`, err);
+                this.logger.error(`[PredictionService] Failed to load CTR ONNX model:`, err);
             }
         } else {
-            this.logger.warn(`[PredictionService] Model not found at ${this.modelPath}. Using heuristic fallback.`);
+            this.logger.warn(`[PredictionService] CTR Model not found at ${this.modelCtrPath}. Using heuristic fallback.`);
+        }
+
+        // Load CVR Model
+        if (fs.existsSync(this.modelCvrPath)) {
+            try {
+                this.sessionCvr = await ort.InferenceSession.create(this.modelCvrPath);
+                this.logger.log(`[PredictionService] Loaded CVR ONNX model from ${this.modelCvrPath}`);
+            } catch (err) {
+                this.logger.error(`[PredictionService] Failed to load CVR ONNX model:`, err);
+            }
+        } else {
+            this.logger.warn(`[PredictionService] CVR Model not found at ${this.modelCvrPath}. Using heuristic fallback.`);
         }
     }
 
@@ -86,22 +87,29 @@ export class PredictionService implements PipelineStep, OnModuleInit {
         fs.watchFile(this.CONFIG_PATH, { interval: 5000 }, async (curr, prev) => {
             if (curr.mtimeMs !== prev.mtimeMs) {
                 this.logger.log(`[PredictionService] Feature config changed, reloading...`);
-                await this.loadConfigAndModel();
+                await this.loadConfigAndModels();
             }
         });
 
-        // Watch Model
-        this.watchModelFile();
-    }
+        // Watch CTR Model
+        if (this.modelCtrPath) {
+            fs.watchFile(this.modelCtrPath, { interval: 5000 }, async (curr, prev) => {
+                if (curr.mtimeMs !== prev.mtimeMs) {
+                    this.logger.log(`[PredictionService] CTR Model file changed, reloading...`);
+                    await this.loadModels();
+                }
+            });
+        }
 
-    private watchModelFile() {
-        if (!this.modelPath) return;
-        fs.watchFile(this.modelPath, { interval: 5000 }, async (curr, prev) => {
-            if (curr.mtimeMs !== prev.mtimeMs) {
-                this.logger.log(`[PredictionService] Model file changed, reloading...`);
-                await this.loadModel();
-            }
-        });
+        // Watch CVR Model
+        if (this.modelCvrPath) {
+            fs.watchFile(this.modelCvrPath, { interval: 5000 }, async (curr, prev) => {
+                if (curr.mtimeMs !== prev.mtimeMs) {
+                    this.logger.log(`[PredictionService] CVR Model file changed, reloading...`);
+                    await this.loadModels();
+                }
+            });
+        }
     }
 
     async execute(
@@ -110,20 +118,19 @@ export class PredictionService implements PipelineStep, OnModuleInit {
     ): Promise<AdCandidate[]> {
         const start = Date.now();
 
-        // If model or config not loaded, fallback to heuristics
-        if (!this.session || !this.featureConfig) {
+        // If models or config not loaded, fallback to heuristics
+        if (!this.sessionCtr || !this.sessionCvr || !this.featureConfig) {
             const results = this.heuristicPredict(candidates);
-            this.logMetrics(results, Date.now() - start, 'heuristic');
+            this.logMetrics(results, Date.now() - start, 'heuristic_fallback_or_missing_model');
             return results;
         }
 
         try {
-            // 1. Extract features for all candidates
+            // 1. Extract unified features for all candidates
             const { sparseTensor, denseTensor } = this.extractFeatures(candidates, context);
 
-            // 2. Run inference
             const feeds = {
-                sparse_inputs: sparseTensor, // Model input name matching export
+                sparse_inputs: sparseTensor, // Shared input names exported by python 
                 dense_inputs: denseTensor,
             };
 
@@ -132,19 +139,26 @@ export class PredictionService implements PipelineStep, OnModuleInit {
                 this.logger.debug(`[Inference Feeds] Dense:  [${denseTensor.data.slice(0, 10).join(', ')}...]`);
             }
 
-            const results = await this.session.run(feeds);
-            // Output name is 'pctr' from export script
-            const outputTensor = results.pctr || results[this.session.outputNames[0]];
-            const pctrValues = outputTensor.data as Float32Array;
+            // 2. Run concurrent inference for CTR and CVR
+            const [resultsCtr, resultsCvr] = await Promise.all([
+                this.sessionCtr.run(feeds),
+                this.sessionCvr.run(feeds)
+            ]);
+
+            // Output name is 'pctr' and 'pcvr' from python export script
+            const outputCtr = resultsCtr.pctr || resultsCtr[this.sessionCtr.outputNames[0]];
+            const pctrValues = outputCtr.data as Float32Array;
+
+            const outputCvr = resultsCvr.pcvr || resultsCvr[this.sessionCvr.outputNames[0]];
+            const pcvrValues = outputCvr.data as Float32Array;
 
             // 3. Assign scores
             for (let i = 0; i < candidates.length; i++) {
                 candidates[i].pctr = Number(pctrValues[i]);
-                // PCVR is not in this model yet, keep using heuristic/default
-                candidates[i].pcvr = this.DEFAULT_CVR;
+                candidates[i].pcvr = Number(pcvrValues[i]);
             }
 
-            this.logMetrics(candidates, Date.now() - start, 'onnx');
+            this.logMetrics(candidates, Date.now() - start, 'onnx_dual');
 
         } catch (e) {
             this.logger.error('[PredictionService] Inference failed:', e);
@@ -259,7 +273,10 @@ export class PredictionService implements PipelineStep, OnModuleInit {
         if (idx === -1) {
             // Fallback to <UNK>
             idx = classes.indexOf('<UNK>');
-            if (idx === -1) idx = 0; // Absolute fallback
+            if (idx === -1) {
+                this.logger.warn(`Feature ${featureName} is missing <UNK> class. Values: ${strVal}. Classes: ${classes}`);
+                idx = 0; // Absolute fallback
+            }
         }
         return BigInt(idx);
     }
