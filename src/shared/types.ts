@@ -130,6 +130,7 @@ export interface UserContext {
     slot_height?: number;
     referer?: string;
     page_context?: string;
+    num_ads?: number;
 
     // Features (for ML)
     age?: number;

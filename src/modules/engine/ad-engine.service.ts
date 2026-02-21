@@ -46,8 +46,9 @@ export class AdEngine {
         candidates = this.rankingStep.execute(candidates, context);
 
         // 5. Rerank
-        // Default limit 5 ads
-        candidates = await this.rerankStep.execute(candidates, context, { limit: 5 });
+        // Default limit to context.num_ads or 1 if not specified
+        const limit = context.num_ads || 1;
+        candidates = await this.rerankStep.execute(candidates, context, { limit });
 
         const duration = Date.now() - start;
         this.logger.log(

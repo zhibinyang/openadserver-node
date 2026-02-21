@@ -4,6 +4,7 @@ import { DRIZZLE } from '../../database/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/schema';
 import { eq, desc } from 'drizzle-orm';
+import { RedisService } from '../../shared/redis/redis.service';
 import {
     CreateAdvertiserDto, UpdateAdvertiserDto,
     CreateCampaignDto, UpdateCampaignDto,
@@ -13,7 +14,10 @@ import {
 
 @Injectable()
 export class AdminService {
-    constructor(@Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>) { }
+    constructor(
+        @Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>,
+        private redisService: RedisService
+    ) { }
 
     // --- Advertisers ---
     async getAdvertisers() {
@@ -198,5 +202,63 @@ export class AdminService {
                 creative: true,
             }
         });
+    }
+
+    // --- Pacing ---
+    async getPacing() {
+        const campaigns = await this.db.query.campaigns.findMany({
+            orderBy: [desc(schema.campaigns.id)],
+        });
+
+        const date = new Date().toISOString().split('T')[0];
+        const pipeline = this.redisService.client.pipeline();
+
+        campaigns.forEach(c => {
+            const dailyKey = `budget:${c.id}:${date}`;
+            const totalKey = `budget:total:${c.id}`;
+            pipeline.hmget(dailyKey, 'spent_today');
+            pipeline.hmget(totalKey, 'spent_total');
+        });
+
+        const results = await pipeline.exec();
+        const pacingInfo = [];
+
+        const now = new Date();
+        const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        const dailyTimeProgress = secSinceMidnight / 86400;
+
+        for (let i = 0; i < campaigns.length; i++) {
+            const c = campaigns[i];
+            const [errDaily, valDaily] = results![i * 2];
+            const [errTotal, valTotal] = results![i * 2 + 1];
+
+            const spentToday = parseFloat((valDaily as (string | null)[])?.[0] || '0');
+            const spentTotal = parseFloat((valTotal as (string | null)[])?.[0] || '0');
+
+            const dailyLimit = c.budget_daily ? parseFloat(c.budget_daily) : 0;
+            const pacingType = c.pacing_type || 1;
+            let targetToday = 0;
+
+            if (pacingType === 1) { // Even
+                targetToday = dailyLimit * dailyTimeProgress;
+            } else if (pacingType === 2) { // Aggressive
+                targetToday = dailyLimit * Math.min(dailyTimeProgress * 1.3, 1.0);
+            } else if (pacingType === 3) { // Daily ASAP
+                targetToday = dailyLimit;
+            }
+
+            pacingInfo.push({
+                campaign_id: c.id,
+                name: c.name,
+                pacing_type: c.pacing_type,
+                budget_daily: dailyLimit,
+                target_today: parseFloat(targetToday.toFixed(2)),
+                spent_today: spentToday,
+                budget_total: c.budget_total ? parseFloat(c.budget_total) : 0,
+                spent_total: spentTotal,
+            });
+        }
+
+        return pacingInfo;
     }
 }

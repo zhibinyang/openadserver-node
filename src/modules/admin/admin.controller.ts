@@ -108,4 +108,10 @@ export class AdminController {
     getInterests() {
         return this.adminService.getInterests();
     }
+
+    // --- Pacing ---
+    @Get('pacing')
+    getPacing() {
+        return this.adminService.getPacing();
+    }
 }

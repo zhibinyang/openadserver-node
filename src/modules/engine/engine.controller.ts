@@ -247,6 +247,7 @@ export class EngineController {
             slot_height: dto.slot_height,
             referer: (req.headers['referer'] || req.headers['referrer'] || '') as string,
             page_context: dto.page_context,
+            num_ads: dto.num_ads || 1,
         };
 
         // 4. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided
@@ -314,9 +315,26 @@ export class EngineController {
             const spentToday = parseFloat((results?.[0]?.[1] as string) || '0');
             const spentTotal = parseFloat((results?.[1]?.[1] as string) || '0');
 
+            const dailyLimit = campaign.budget_daily ? parseFloat(campaign.budget_daily) : 0;
+            // @ts-ignore
+            const pacingType = campaign.pacing_type || 1;
+
+            const now = new Date();
+            const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+            const dailyTimeProgress = secSinceMidnight / 86400;
+
+            let targetToday = 0;
+            if (pacingType === 1) { // Even
+                targetToday = dailyLimit * dailyTimeProgress;
+            } else if (pacingType === 2) { // Aggressive
+                targetToday = dailyLimit * Math.min(dailyTimeProgress * 1.3, 1.0);
+            } else if (pacingType === 3) { // Daily ASAP
+                targetToday = dailyLimit;
+            }
+
             this.logger.debug(
-                `[Winner Pacing] Campaign ${winner.campaign_id} ` +
-                `| Daily: $${spentToday.toFixed(2)} / $${campaign.budget_daily || 0} ` +
+                `[Winner Pacing] Campaign ${winner.campaign_id} (Type: ${pacingType}) ` +
+                `| Daily: $${spentToday.toFixed(2)} / Target: $${targetToday.toFixed(2)} / Limit: $${dailyLimit.toFixed(2)} ` +
                 `| Total: $${spentTotal.toFixed(2)} / $${campaign.budget_total || 0}`
             );
         } catch (err) {
