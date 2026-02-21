@@ -9,8 +9,12 @@ const newCampaign = ref({
     name: '',
     advertiser_id: null,
     budget_daily: 100,
+    budget_total: 1000,
     bid_type: 1, // CPM
     bid_amount: 1.0,
+    pacing_type: 1, // EVEN
+    start_time: '',
+    end_time: '',
     status: 1,
     is_active: true
 });
@@ -67,7 +71,7 @@ onMounted(loadData);
     <!-- Create Form -->
     <div class="card">
       <h3>New Campaign</h3>
-      <div style="display: grid; grid-template-columns: repeat(6, 1fr) auto; gap: 10px; align-items: end;">
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; align-items: end; margin-bottom: 15px;">
         <div>
           <label>Name</label>
           <input v-model="newCampaign.name" placeholder="Campaign Name" />
@@ -86,6 +90,10 @@ onMounted(loadData);
           <input v-model.number="newCampaign.budget_daily" type="number" />
         </div>
         <div>
+          <label>Total Budget</label>
+          <input v-model.number="newCampaign.budget_total" type="number" />
+        </div>
+        <div>
            <label>Bid Type</label>
            <select v-model="newCampaign.bid_type">
                <option :value="1">CPM</option>
@@ -99,13 +107,33 @@ onMounted(loadData);
            <input v-model.number="newCampaign.bid_amount" type="number" step="0.01" />
         </div>
         <div>
+           <label>Pacing Type</label>
+           <select v-model="newCampaign.pacing_type">
+               <option :value="1">Even</option>
+               <option :value="2">Aggressive</option>
+               <option :value="3">Daily ASAP</option>
+               <option :value="4">Flight ASAP</option>
+               <option :value="5">Evergreen</option>
+           </select>
+        </div>
+        <div>
             <label>Active</label>
             <select v-model="newCampaign.is_active">
                 <option :value="true">Yes</option>
                 <option :value="false">No</option>
             </select>
         </div>
-        <button class="btn btn-primary" @click="create">Create</button>
+        <div>
+            <label>Start Date</label>
+            <input type="date" v-model="newCampaign.start_time" />
+        </div>
+        <div>
+            <label>End Date</label>
+            <input type="date" v-model="newCampaign.end_time" />
+        </div>
+        <div style="grid-column: span 2; text-align: right;">
+            <button class="btn btn-primary" @click="create">Create</button>
+        </div>
       </div>
     </div>
 
@@ -117,9 +145,13 @@ onMounted(loadData);
             <th>ID</th>
             <th>Name</th>
             <th>Advertiser</th>
-            <th>Budget</th>
+            <th>Daily Budget</th>
+            <th>Total Budget</th>
+            <th>Pacing Type</th>
             <th>Bid Type</th>
             <th>Bid Amount</th>
+            <th>Start Date</th>
+            <th>End Date</th>
             <th>Active</th>
             <th>Actions</th>
           </tr>
@@ -140,6 +172,22 @@ onMounted(loadData);
               <span v-else>${{ item.budget_daily }}</span>
             </td>
             <td>
+              <input v-if="item.isEditing" v-model.number="item.budget_total" type="number" />
+              <span v-else>${{ item.budget_total || 0 }}</span>
+            </td>
+            <td>
+                <select v-if="item.isEditing" v-model="item.pacing_type">
+                    <option :value="1">Even</option>
+                    <option :value="2">Aggressive</option>
+                    <option :value="3">Daily ASAP</option>
+                    <option :value="4">Flight ASAP</option>
+                    <option :value="5">Evergreen</option>
+                </select>
+                <span v-else>
+                    {{ item.pacing_type === 1 ? 'Even' : item.pacing_type === 2 ? 'Aggressive' : item.pacing_type === 3 ? 'Daily ASAP' : item.pacing_type === 4 ? 'Flight ASAP' : 'Evergreen' }}
+                </span>
+            </td>
+            <td>
                 <select v-if="item.isEditing" v-model="item.bid_type">
                    <option :value="1">CPM</option>
                    <option :value="2">CPC</option>
@@ -153,6 +201,14 @@ onMounted(loadData);
             <td>
                 <input v-if="item.isEditing" v-model.number="item.bid_amount" type="number" step="0.01" />
                 <span v-else>${{ item.bid_amount }}</span>
+            </td>
+            <td>
+                <input v-if="item.isEditing" type="date" v-model="item.start_time" />
+                <span v-else>{{ item.start_time ? new Date(item.start_time).toLocaleDateString() : 'N/A' }}</span>
+            </td>
+            <td>
+                <input v-if="item.isEditing" type="date" v-model="item.end_time" />
+                <span v-else>{{ item.end_time ? new Date(item.end_time).toLocaleDateString() : 'N/A' }}</span>
             </td>
             <td>
                 <input v-if="item.isEditing" type="checkbox" v-model="item.is_active" />

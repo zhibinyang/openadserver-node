@@ -12,7 +12,7 @@ import {
     index,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { Status, BidType, CreativeType, EventType } from '../shared/types';
+import { Status, BidType, PacingType, CreativeType, EventType } from '../shared/types';
 
 // --- ADVERTISERS ---
 export const advertisers = pgTable('advertisers', {
@@ -50,6 +50,7 @@ export const campaigns = pgTable('campaigns', {
     // Bidding
     bid_type: integer('bid_type').default(BidType.CPM),
     bid_amount: numeric('bid_amount', { precision: 12, scale: 4 }).default('0'),
+    pacing_type: integer('pacing_type').default(PacingType.EVEN),
 
     // Frequency cap
     freq_cap_daily: integer('freq_cap_daily').default(10),

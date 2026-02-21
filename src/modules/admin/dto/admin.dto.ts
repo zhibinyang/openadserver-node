@@ -1,7 +1,7 @@
 
 import { IsString, IsNumber, IsOptional, IsEnum, IsBoolean, IsObject, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Status, BidType, CreativeType } from '../../../shared/types';
+import { Status, BidType, PacingType, CreativeType } from '../../../shared/types';
 
 // Advertisers
 export class CreateAdvertiserDto {
@@ -60,6 +60,19 @@ export class CreateCampaignDto {
     @IsOptional()
     @Type(() => Number)
     bid_amount?: number;
+
+    @IsEnum(PacingType)
+    @IsOptional()
+    @Type(() => Number)
+    pacing_type?: PacingType;
+
+    @IsDateString()
+    @IsOptional()
+    start_time?: string;
+
+    @IsDateString()
+    @IsOptional()
+    end_time?: string;
 
     @IsBoolean()
     @IsOptional()
@@ -160,6 +173,9 @@ export class UpdateCampaignDto {
     @IsNumber() @IsOptional() @Type(() => Number) budget_total?: number;
     @IsEnum(BidType) @IsOptional() @Type(() => Number) bid_type?: BidType;
     @IsNumber() @IsOptional() @Type(() => Number) bid_amount?: number;
+    @IsEnum(PacingType) @IsOptional() @Type(() => Number) pacing_type?: PacingType;
+    @IsDateString() @IsOptional() start_time?: string;
+    @IsDateString() @IsOptional() end_time?: string;
     @IsBoolean() @IsOptional() is_active?: boolean;
     @IsEnum(Status) @IsOptional() @Type(() => Number) status?: Status;
 }

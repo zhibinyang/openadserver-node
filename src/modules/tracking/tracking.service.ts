@@ -104,8 +104,13 @@ export class TrackingService {
             }
 
             if (cost > 0) {
-                const key = `budget:${campaignId}:${today}`;
-                await this.redisService.hincrbyfloat(key, 'spent_today', cost);
+                const dailyKey = `budget:${campaignId}:${today}`;
+                const totalKey = `budget:total:${campaignId}`;
+
+                await Promise.all([
+                    this.redisService.hincrbyfloat(dailyKey, 'spent_today', cost),
+                    this.redisService.hincrbyfloat(totalKey, 'spent_total', cost),
+                ]);
             }
         }
     }

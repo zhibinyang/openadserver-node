@@ -58,49 +58,120 @@ export class FilterService implements PipelineStep {
     }
 
     /**
-     * Batch check budgets for all candidates using Redis pipeline.
-     * Returns array of booleans indicating if each candidate is budget-exhausted.
+     * Batch check budgets and pacing for all candidates using Redis pipeline.
+     * Returns array of booleans indicating if each candidate should be DROPPED (exhausted or throttled).
      */
     private async batchCheckBudgets(candidates: AdCandidate[], date: string): Promise<boolean[]> {
         const pipeline = this.redisService.client.pipeline();
-        const campaignLimits: number[] = [];
 
+        // Prepare Redis queries
         for (const candidate of candidates) {
             const campaign = this.cacheService.getCampaign(candidate.campaign_id);
-            const limit = campaign?.budget_daily ? parseFloat(campaign.budget_daily) : 0;
-            campaignLimits.push(limit);
 
-            if (limit > 0) {
-                const key = `budget:${candidate.campaign_id}:${date}`;
-                pipeline.hmget(key, 'spent_today');
-            } else {
-                pipeline.get('__dummy__'); // Placeholder to maintain index alignment
-            }
+            // Query both daily and total spent for all campaigns to simplify pipeline indexing
+            const dailyKey = `budget:${candidate.campaign_id}:${date}`;
+            const totalKey = `budget:total:${candidate.campaign_id}`;
+            pipeline.hmget(dailyKey, 'spent_today');
+            pipeline.hmget(totalKey, 'spent_total');
         }
 
         const results = await pipeline.exec();
-        const exhausted: boolean[] = [];
+        const dropDecisions: boolean[] = [];
+
+        // Time logic for pacing
+        const now = new Date();
+        const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        const dailyTimeProgress = secSinceMidnight / 86400; // 0.0 to 1.0
 
         for (let i = 0; i < candidates.length; i++) {
-            const limit = campaignLimits[i];
-            if (limit <= 0) {
-                exhausted.push(false);
+            const candidate = candidates[i];
+            const campaign = this.cacheService.getCampaign(candidate.campaign_id);
+            if (!campaign) {
+                dropDecisions.push(true); // Drop invalid campaigns
                 continue;
             }
 
-            const [err, value] = results![i];
-            if (err) {
-                this.logger.warn(`Redis error checking budget: ${err}`);
-                exhausted.push(false);
+            const dailyLimit = campaign.budget_daily ? parseFloat(campaign.budget_daily) : 0;
+            const totalLimit = campaign.budget_total ? parseFloat(campaign.budget_total) : 0;
+            // Assuming pacing_type comes from DB (Even=1, Aggressive=2, DailyASAP=3, FlightASAP=4)
+            // @ts-ignore - pacing_type added to cache/DB but might not be explicitly typed in memory yet
+            const pacingType = campaign.pacing_type || 1;
+
+            // EVER_GREEN ignores all budget caps and pacing
+            if (pacingType === 5) {
+                dropDecisions.push(false);
                 continue;
             }
 
-            // value is from hmget, returns array of strings
-            const spentToday = (value as (string | null)[])?.[0];
-            exhausted.push(!!(spentToday && parseFloat(spentToday) >= limit));
+            const [errDaily, valDaily] = results![i * 2];
+            const [errTotal, valTotal] = results![i * 2 + 1];
+
+            if (errDaily || errTotal) {
+                this.logger.warn(`Redis error checking budget for Camp ${candidate.campaign_id}`);
+                dropDecisions.push(false);
+                continue;
+            }
+
+            const spentToday = parseFloat((valDaily as (string | null)[])?.[0] || '0');
+            const spentTotal = parseFloat((valTotal as (string | null)[])?.[0] || '0');
+
+            // 1. Hard Cap Checks
+            if (totalLimit > 0 && spentTotal >= totalLimit) {
+                dropDecisions.push(true);
+                continue;
+            }
+            // Flight ASAP ignores daily limit
+            if (pacingType !== 4 && dailyLimit > 0 && spentToday >= dailyLimit) {
+                dropDecisions.push(true);
+                continue;
+            }
+
+            // 2. Probabilistic Pacing Throttling
+            let shouldDrop = false;
+
+            if (dailyLimit > 0) {
+                const dailySpendProgress = spentToday / dailyLimit;
+
+                switch (pacingType) {
+                    case 1: // EVEN (Strictly follow time)
+                        // If spent 50% but time is only 30%, drop probability is high
+                        if (dailySpendProgress > dailyTimeProgress) {
+                            // The further ahead we are, the higher the drop chance
+                            const overspendRatio = dailySpendProgress - dailyTimeProgress;
+                            // throttleRate scales with overspend (e.g. 5% ahead = 50% drop chance)
+                            const throttleRate = Math.min(overspendRatio * 10, 0.95);
+                            shouldDrop = Math.random() < throttleRate;
+                        }
+                        break;
+
+                    case 2: // AGGRESSIVE (Pace ahead of time, front-load)
+                        // Allow spending up to 130% of time progress early in the day
+                        const aggressiveTarget = Math.min(dailyTimeProgress * 1.3, 1.0);
+                        if (dailySpendProgress > aggressiveTarget) {
+                            const overspendRatio = dailySpendProgress - aggressiveTarget;
+                            const throttleRate = Math.min(overspendRatio * 5, 0.90);
+                            shouldDrop = Math.random() < throttleRate;
+                        }
+                        break;
+
+                    case 3: // DAILY_ASAP
+                        // No throttling until limit is hit (handled in Hard Cap check)
+                        break;
+
+                    case 4: // FLIGHT_ASAP
+                        // TODO: Implement total budget flight pacing if needed. Currently ASAP.
+                        break;
+                }
+            }
+
+            if (shouldDrop && process.env.DEBUG_PREDICTION) {
+                this.logger.debug(`[Pacing Throttle] Dropped Candidate ${candidate.campaign_id} (Type: ${pacingType}, Spent: ${(spentToday / dailyLimit * 100).toFixed(1)}%, Time: ${(dailyTimeProgress * 100).toFixed(1)}%)`);
+            }
+
+            dropDecisions.push(shouldDrop);
         }
 
-        return exhausted;
+        return dropDecisions;
     }
 
     /**
@@ -132,6 +203,17 @@ export class FilterService implements PipelineStep {
         const capped: boolean[] = [];
 
         for (let i = 0; i < candidates.length; i++) {
+            const candidate = candidates[i];
+            const campaign = this.cacheService.getCampaign(candidate.campaign_id);
+            // @ts-ignore
+            const pacingType = campaign?.pacing_type || 1;
+
+            // EVER_GREEN ignores frequency caps
+            if (pacingType === 5) {
+                capped.push(false);
+                continue;
+            }
+
             const limit = campaignLimits[i];
             if (limit <= 0) {
                 capped.push(false);

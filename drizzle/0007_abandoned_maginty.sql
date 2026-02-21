@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "pacing_type" integer DEFAULT 1;

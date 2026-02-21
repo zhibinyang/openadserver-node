@@ -50,6 +50,13 @@
       "when": 1771574347329,
       "tag": "0006_add_audience_interests",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1771638371779,
+      "tag": "0007_abandoned_maginty",
+      "breakpoints": true
     }
   ]
 }

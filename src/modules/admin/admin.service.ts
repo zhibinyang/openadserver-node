@@ -72,6 +72,8 @@ export class AdminService {
                 budget_daily: data.budget_daily?.toString(),
                 budget_total: data.budget_total?.toString(),
                 bid_amount: data.bid_amount?.toString(),
+                start_time: data.start_time ? new Date(data.start_time) : undefined,
+                end_time: data.end_time ? new Date(data.end_time) : undefined,
             })
             .returning();
     }
@@ -81,6 +83,14 @@ export class AdminService {
         if (data.budget_daily !== undefined) updateData.budget_daily = data.budget_daily.toString();
         if (data.budget_total !== undefined) updateData.budget_total = data.budget_total.toString();
         if (data.bid_amount !== undefined) updateData.bid_amount = data.bid_amount.toString();
+
+        // Convert strings to Dates
+        if (data.start_time !== undefined) {
+            updateData.start_time = data.start_time ? new Date(data.start_time) : null;
+        }
+        if (data.end_time !== undefined) {
+            updateData.end_time = data.end_time ? new Date(data.end_time) : null;
+        }
 
         delete updateData.id;
         delete updateData.advertiser;

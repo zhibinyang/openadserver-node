@@ -20,6 +20,17 @@ export enum BidType {
 }
 
 /**
+ * Pacing type enum.
+ */
+export enum PacingType {
+    EVEN = 1,          // Spend evenly over the remaining time
+    AGGRESSIVE = 2,    // Spend slightly ahead of schedule
+    DAILY_ASAP = 3,    // Spend as fast as possible until daily budget hits
+    FLIGHT_ASAP = 4,   // Ignore daily budget, spend total budget ASAP
+    EVER_GREEN = 5,    // Fallback tier: Never drop, ignore budgets/caps
+}
+
+/**
  * Creative type enum.
  */
 export enum CreativeType {
