@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Get, Query, Req, Res, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Req, Res, BadRequestException, Logger } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
 import { UserContext, CreativeType, EventType } from '../../shared/types';
@@ -12,6 +12,8 @@ import { AnalyticsService } from '../analytics/analytics.service';
 
 @Controller('ad')
 export class EngineController {
+    private readonly logger = new Logger(EngineController.name);
+
     constructor(
         private readonly adEngine: AdEngine,
         private readonly responseFactory: ResponseBuilderFactory,
@@ -261,18 +263,19 @@ export class EngineController {
                 // Silent failure
             }
         }
-
-        if (context.os !== 'unknown') {
-            console.log(`[EngineController] Detected OS: ${context.os}`);
-        }
-        if (context.device) {
-            console.log(`[EngineController] Detected Device: ${context.device}`);
-        }
-        if (context.browser) {
-            console.log(`[EngineController] Detected Browser: ${context.browser}`);
-        }
-        if (country) {
-            console.log(`[EngineController] Detected Country: ${country} (From: ${dto.country ? 'DTO' : 'GeoIP'})`);
+        if (process.env.DEBUG_PREDICTION || process.env.NODE_ENV !== 'production') {
+            if (context.os !== 'unknown') {
+                this.logger.debug(`Detected OS: ${context.os}`);
+            }
+            if (context.device) {
+                this.logger.debug(`Detected Device: ${context.device}`);
+            }
+            if (context.browser) {
+                this.logger.debug(`Detected Browser: ${context.browser}`);
+            }
+            if (country) {
+                this.logger.debug(`Detected Country: ${country} (From: ${dto.country ? 'DTO' : 'GeoIP'})`);
+            }
         }
 
         return context;
