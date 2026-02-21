@@ -97,6 +97,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 double budget_total = 13;
                 double spent_today = 14;
                 double spent_total = 15;
+                int64 billable_count_today = 16;
+                int64 billable_count_total = 17;
             }
         `;
         const { parse } = protobuf;
@@ -308,8 +310,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
             for (const c of campaigns) {
                 const dailyKey = `budget:${c.id}:${date}`;
                 const totalKey = `budget:total:${c.id}`;
-                pipeline.hget(dailyKey, 'spent_today');
-                pipeline.hget(totalKey, 'spent_total');
+                pipeline.hmget(dailyKey, 'spent_today', 'count_today');
+                pipeline.hmget(totalKey, 'spent_total', 'count_total');
             }
 
             const results = await pipeline.exec();
@@ -322,8 +324,11 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 const spentTodayResult = results?.[i * 2]?.[1];
                 const spentTotalResult = results?.[i * 2 + 1]?.[1];
 
-                const spentToday = parseFloat((spentTodayResult as string) || '0');
-                const spentTotal = parseFloat((spentTotalResult as string) || '0');
+                const spentToday = parseFloat((spentTodayResult as (string | null)[])?.[0] || '0');
+                const countToday = parseInt((spentTodayResult as (string | null)[])?.[1] || '0', 10);
+
+                const spentTotal = parseFloat((spentTotalResult as (string | null)[])?.[0] || '0');
+                const countTotal = parseInt((spentTotalResult as (string | null)[])?.[1] || '0', 10);
 
                 rows.push({
                     log_timestamp: logTimestamp,
@@ -341,6 +346,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                     budget_total: parseFloat(c.budget_total?.toString() || '0'),
                     spent_today: spentToday,
                     spent_total: spentTotal,
+                    billable_count_today: countToday,
+                    billable_count_total: countTotal,
                 });
             }
 
@@ -378,6 +385,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 budget_total: row.budget_total,
                 spent_today: row.spent_today,
                 spent_total: row.spent_total,
+                billable_count_today: row.billable_count_today,
+                billable_count_total: row.billable_count_total,
             };
 
             const err = this.CampaignHourlyMessage.verify(payload);
@@ -435,6 +444,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
             budget_total: row.budget_total.toString(),
             spent_today: row.spent_today.toString(),
             spent_total: row.spent_total.toString(),
+            billable_count_today: row.billable_count_today,
+            billable_count_total: row.billable_count_total,
         }));
 
         await this.db.insert(schema.campaign_hourly_performance).values(pgRows);

@@ -216,8 +216,8 @@ export class AdminService {
         campaigns.forEach(c => {
             const dailyKey = `budget:${c.id}:${date}`;
             const totalKey = `budget:total:${c.id}`;
-            pipeline.hmget(dailyKey, 'spent_today');
-            pipeline.hmget(totalKey, 'spent_total');
+            pipeline.hmget(dailyKey, 'spent_today', 'count_today');
+            pipeline.hmget(totalKey, 'spent_total', 'count_total');
         });
 
         const results = await pipeline.exec();
@@ -233,7 +233,10 @@ export class AdminService {
             const [errTotal, valTotal] = results![i * 2 + 1];
 
             const spentToday = parseFloat((valDaily as (string | null)[])?.[0] || '0');
+            const countToday = parseInt((valDaily as (string | null)[])?.[1] || '0', 10);
+
             const spentTotal = parseFloat((valTotal as (string | null)[])?.[0] || '0');
+            const countTotal = parseInt((valTotal as (string | null)[])?.[1] || '0', 10);
 
             const dailyLimit = c.budget_daily ? parseFloat(c.budget_daily) : 0;
             const pacingType = c.pacing_type || 1;
@@ -254,8 +257,10 @@ export class AdminService {
                 budget_daily: dailyLimit,
                 target_today: parseFloat(targetToday.toFixed(2)),
                 spent_today: spentToday,
+                billable_count_today: countToday,
                 budget_total: c.budget_total ? parseFloat(c.budget_total) : 0,
                 spent_total: spentTotal,
+                billable_count_total: countTotal,
             });
         }
 

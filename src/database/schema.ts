@@ -242,4 +242,6 @@ export const campaign_hourly_performance = pgTable('campaign_hourly_performance'
     budget_total: numeric('budget_total', { precision: 12, scale: 4 }),
     spent_today: numeric('spent_today', { precision: 12, scale: 4 }),
     spent_total: numeric('spent_total', { precision: 12, scale: 4 }),
+    billable_count_today: integer('billable_count_today'),
+    billable_count_total: integer('billable_count_total'),
 });

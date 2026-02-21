@@ -68,6 +68,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         return parseFloat(res); // API returns string
     }
 
+    async hincrby(key: string, field: string, increment: number): Promise<number> {
+        return this.redis.hincrby(key, field, increment);
+    }
+
     async hmget(key: string, ...fields: string[]): Promise<(string | null)[]> {
         return this.redis.hmget(key, ...fields);
     }

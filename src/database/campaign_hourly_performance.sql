@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS `analytics.campaign_hourly_performance` (
   budget_daily FLOAT64,
   budget_total FLOAT64,
   spent_today FLOAT64,
-  spent_total FLOAT64
+  spent_total FLOAT64,
+  billable_count_today INT64,
+  billable_count_total INT64
 )
 PARTITION BY DATE(log_timestamp)
 CLUSTER BY campaign_id;

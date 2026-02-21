@@ -64,6 +64,13 @@
       "when": 1771641365658,
       "tag": "0008_chunky_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771681631493,
+      "tag": "0009_strong_human_robot",
+      "breakpoints": true
     }
   ]
 }

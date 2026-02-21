@@ -138,6 +138,8 @@ export class TrackingService {
                 await Promise.all([
                     this.redisService.hincrbyfloat(dailyKey, 'spent_today', cost),
                     this.redisService.hincrbyfloat(totalKey, 'spent_total', cost),
+                    this.redisService.hincrby(dailyKey, 'count_today', 1),
+                    this.redisService.hincrby(totalKey, 'count_total', 1),
                 ]);
             }
         }
