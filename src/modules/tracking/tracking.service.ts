@@ -16,28 +16,55 @@ export class TrackingService {
     ) { }
 
     async track(dto: TrackingDto): Promise<void> {
-        let campaignId: number;
-        let creativeId: number;
+        let campaignId: number = 0;
+        let creativeId: number = 0;
         let userId: string | undefined;
-        let requestId: string;
+        let requestId: string = '';
         let clickId = dto.click_id;
 
         // Context fields - Now mostly empty for lightweight tracking
         let device: string | undefined;
+        let os: string | undefined;
         let browser: string | undefined;
         let country: string | undefined;
         let city: string | undefined;
         let ip: string | undefined;
         let bid = 0;
 
-        // Try click_id-based tracking (lightweight)
+        // Try click_id-based tracking
         if (dto.click_id) {
-            // If cid/crid are passed in the URL (restored for real-time pacing), use them.
-            // Otherwise default to 0 and rely on offline BQ joins.
-            campaignId = dto.cid ? parseInt(dto.cid, 10) : 0;
-            creativeId = dto.crid ? parseInt(dto.crid, 10) : 0;
-            userId = dto.uid || '';
-            requestId = ''; // Unknown unless passed
+            // First, attempt to load rich context from Redis
+            const cachedData = await this.redisService.get(`click:${dto.click_id}`);
+            if (cachedData) {
+                try {
+                    const parsed = JSON.parse(cachedData);
+                    campaignId = parsed.campaignId;
+                    creativeId = parsed.creativeId;
+                    userId = parsed.userId || dto.uid || '';
+                    requestId = parsed.requestId || '';
+                    device = parsed.device;
+                    os = parsed.os;
+                    browser = parsed.browser;
+                    country = parsed.country;
+                    city = parsed.city;
+                    // For click/conversion, adopt the pre-calculated contextual budget cost if the URL didn't specify it
+                    if (!dto.cost || dto.cost === '0') {
+                        if (dto.type === TrackingType.CLICK) bid = parsed.clickCost || 0;
+                        if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) bid = parsed.convCost || 0;
+                    }
+                    this.logger.log(`Restored tracking context from Redis for click_id: ${dto.click_id}`);
+                } catch (e) {
+                    this.logger.warn(`Failed to parse click context for ${dto.click_id}`);
+                }
+            }
+
+            // Fallback to URL defaults if Redis data was expired or missing
+            if (campaignId === undefined) {
+                campaignId = dto.cid ? parseInt(dto.cid, 10) : 0;
+                creativeId = dto.crid ? parseInt(dto.crid, 10) : 0;
+                userId = dto.uid || '';
+                requestId = ''; // Unknown unless passed
+            }
 
             this.logger.log(`Tracking event (click_id: ${dto.click_id}, cid: ${campaignId}, crid: ${creativeId})`);
         }
@@ -88,6 +115,7 @@ export class TrackingService {
             country: country,
             city: city,
             device: device,
+            os: os,
             browser: browser,
             bid: bid,
             price: cost,

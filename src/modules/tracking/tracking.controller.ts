@@ -33,6 +33,7 @@ export class TrackingController {
         @Query('to') to: string,
         @Query('cid') cid: string,
         @Query('crid') crid: string,
+        @Query('cost') cost: string,
         @Res() res: FastifyReply,
     ) {
         // Validate required parameter
@@ -47,7 +48,7 @@ export class TrackingController {
                 click_id: clickId,
                 cid,
                 crid,
-                cost: bid, // Pass bid as the cost for CPC campaigns
+                cost: cost || '0', // Only CPC campaigns will have non-zero cost mapped here
             }).catch(err => console.error('Click tracking failed:', err));
         }
 

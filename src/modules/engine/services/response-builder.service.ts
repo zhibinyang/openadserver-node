@@ -20,7 +20,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
 
     constructor(
         private readonly macroReplacer: MacroReplacer,
-        // private readonly redisService: RedisService, // Removed for lightweight tracking
+        private readonly redisService: RedisService,
     ) { }
 
     async build(candidates: AdCandidate[], context: UserContext, requestId: string): Promise<any> {
@@ -31,8 +31,22 @@ export class JsonResponseBuilder implements AdResponseBuilder {
             candidates.map(async (c) => {
                 const clickId = c.click_id || randomUUID();
 
-                // Store click metadata in Redis -> REMOVED
-                // We now rely on Request Log in BigQuery for context.
+                // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
+                const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
+                const convCost = c.bid_type === 3 ? c.bid : 0; // CPA = 3
+                await this.redisService.set(`click:${clickId}`, JSON.stringify({
+                    requestId,
+                    campaignId: c.campaign_id,
+                    creativeId: c.creative_id,
+                    userId: context.user_id || context.ip,
+                    device: context.device,
+                    os: context.os,
+                    browser: context.browser,
+                    country: context.country,
+                    city: context.city,
+                    clickCost,
+                    convCost
+                }), this.CLICK_ID_TTL);
 
                 // Macro replacement
                 const originalLandingUrl = this.macroReplacer.replace(c.landing_url, {
@@ -47,7 +61,6 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                 const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=cpc&utm_campaign=${c.campaign_id}`;
 
                 // External click-through URL
-                const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
                 const impCost = c.bid_type === 1 || c.bid_type === 4 ? c.bid / 1000 : 0; // CPM/OCPM = 1/4
 
                 const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
@@ -64,7 +77,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                     landing_url: landingUrl,
                     imp_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp${trackingQuery}&cost=${impCost}`,
                     click_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=click${trackingQuery}&cost=${clickCost}`,
-                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion${trackingQuery}&conversion_value=\${CONVERSION_VALUE}`,
+                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion${trackingQuery}&conversion_value=\${CONVERSION_VALUE}&cost=${convCost}`,
                 };
             })
         );
@@ -82,7 +95,7 @@ export class VastResponseBuilder implements AdResponseBuilder {
 
     constructor(
         private readonly macroReplacer: MacroReplacer,
-        // private readonly redisService: RedisService,
+        private readonly redisService: RedisService,
         private readonly vastBuilder: VastBuilder,
     ) { }
 
@@ -96,8 +109,22 @@ export class VastResponseBuilder implements AdResponseBuilder {
         const clickId = c.click_id || randomUUID();
         const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
-        // Store click metadata in Redis -> REMOVED
-        // We now rely on Request Log in BigQuery for context.
+        // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
+        const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
+        const convCost = c.bid_type === 3 ? c.bid : 0; // CPA = 3
+        await this.redisService.set(`click:${clickId}`, JSON.stringify({
+            requestId,
+            campaignId: c.campaign_id,
+            creativeId: c.creative_id,
+            userId: context.user_id || context.ip,
+            device: context.device,
+            os: context.os,
+            browser: context.browser,
+            country: context.country,
+            city: context.city,
+            clickCost,
+            convCost
+        }), this.CLICK_ID_TTL);
 
         // Macro replacement
         const originalLandingUrl = this.macroReplacer.replace(c.landing_url, {
@@ -112,7 +139,6 @@ export class VastResponseBuilder implements AdResponseBuilder {
         const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=video`;
 
         // External click-through URL
-        const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
         const impCost = c.bid_type === 1 || c.bid_type === 4 ? c.bid / 1000 : 0; // CPM/OCPM = 1/4
         const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
 
