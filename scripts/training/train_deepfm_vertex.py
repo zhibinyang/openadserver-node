@@ -170,10 +170,20 @@ def load_data_from_bq():
       FROM `{dataset}.{table}`
       WHERE event_type = 2
       QUALIFY ROW_NUMBER() OVER(PARTITION BY click_id ORDER BY event_time) = 1
+    ),
+    base_conversions AS (
+      SELECT click_id, 1 AS is_converted
+      FROM `{dataset}.{table}`
+      WHERE event_type = 3
+      QUALIFY ROW_NUMBER() OVER(PARTITION BY click_id ORDER BY event_time) = 1
     )
-    SELECT r.*, COALESCE(c.is_clicked, 0) AS label
+    SELECT 
+        r.*, 
+        COALESCE(c.is_clicked, 0) AS label_ctr,
+        COALESCE(cv.is_converted, 0) AS label_cvr
     FROM base_requests r
     LEFT JOIN base_clicks c ON r.click_id = c.click_id
+    LEFT JOIN base_conversions cv ON r.click_id = cv.click_id
     WHERE r.data_split != 'IGNORE' AND r.click_id IS NOT NULL
     """.format(dataset=DATASET_ID, table=TABLE_ID)
     
@@ -209,12 +219,13 @@ def preprocess_data(df):
     dense_data = df[DENSE_FEATURES].fillna(0).values.astype(np.float32)
     dense_data = dense_scaler.fit_transform(dense_data)
     
-    labels = df[LABEL_COL].values.astype(np.float32)
+    labels_ctr = df["label_ctr"].values.astype(np.float32)
+    labels_cvr = df["label_cvr"].values.astype(np.float32)
     splits = df["data_split"].values
     
-    return sparse_data, dense_data, labels, splits, sparse_encoders, dense_scaler
+    return sparse_data, dense_data, labels_ctr, labels_cvr, splits, sparse_encoders, dense_scaler
 
-def export_onnx(model, sparse_dims, dense_dim, output_path):
+def export_onnx(model, sparse_dims, dense_dim, output_path, out_name='pctr'):
     print(f"Exporting ONNX model to {output_path}...")
     model.eval()
     
@@ -226,13 +237,14 @@ def export_onnx(model, sparse_dims, dense_dim, output_path):
         (dummy_sparse, dummy_dense),
         output_path,
         input_names=['sparse_inputs', 'dense_inputs'],
-        output_names=['pctr'],
+        output_names=[out_name],
         dynamic_axes={
             'sparse_inputs': {0: 'batch_size'},
             'dense_inputs': {0: 'batch_size'},
-            'pctr': {0: 'batch_size'}
+            out_name: {0: 'batch_size'}
         },
-        opset_version=14
+        opset_version=14,
+        dynamo=False
     )
     print("ONNX export complete.")
 
@@ -246,48 +258,11 @@ def upload_to_gcs(source_file_path, destination_blob_name):
     blob.upload_from_filename(source_file_path)
     print(f"File uploaded to gs://{GCS_BUCKET_NAME}/{destination_blob_name}")
 
-def main():
-    # 1. Load
-    df = load_data_from_bq()
-    if df.empty:
-        print("No data. Exiting.")
-        return
-
-    # 2. Preprocess
-    sparse_x, dense_x, y, splits, encoders, scaler = preprocess_data(df)
-    
-    train_mask = splits == 'TRAIN'
-    val_mask = splits == 'VALIDATE'
-    
-    X_train_sparse = torch.tensor(sparse_x[train_mask], dtype=torch.long)
-    X_train_dense = torch.tensor(dense_x[train_mask], dtype=torch.float32)
-    y_train = torch.tensor(y[train_mask], dtype=torch.float32)
-    
-    X_val_sparse = torch.tensor(sparse_x[val_mask], dtype=torch.long)
-    X_val_dense = torch.tensor(dense_x[val_mask], dtype=torch.float32)
-    y_val = torch.tensor(y[val_mask], dtype=torch.float32)
-    
-    train_dataset = TensorDataset(X_train_sparse, X_train_dense, y_train)
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    
-    # 3. Model
-    sparse_dims = [len(enc.classes_) for enc in encoders.values()]
-    dense_dim = len(DENSE_FEATURES)
-    
-    print(f"Model Config: Sparse Dims={sparse_dims}, Dense Dim={dense_dim}, Embedding Dim={EMBEDDING_DIM}")
-    model = DeepFM(
-        sparse_feature_dims=sparse_dims, 
-        dense_feature_dim=dense_dim,
-        embedding_dim=EMBEDDING_DIM,
-        hidden_units=DNN_HIDDEN_UNITS,
-        dropout=DNN_DROPOUT
-    ).to(DEVICE)
-    
+def train_model(model, train_loader, X_val_sparse, X_val_dense, y_val, model_name="CTR"):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     
-    # 4. Train
-    print(f"Starting training on {DEVICE}...")
+    print(f"--- Starting training {model_name} model on {DEVICE} ---")
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0
@@ -304,14 +279,74 @@ def main():
         # Validation
         model.eval()
         with torch.no_grad():
-            val_out = model(X_val_sparse.to(DEVICE), X_val_dense.to(DEVICE))
-            val_loss = criterion(val_out, y_val.to(DEVICE))
-            preds = (val_out > 0.5).float()
-            accuracy = (preds == y_val.to(DEVICE)).float().mean()
+            if len(X_val_sparse) > 0:
+                val_out = model(X_val_sparse.to(DEVICE), X_val_dense.to(DEVICE))
+                val_loss = criterion(val_out, y_val.to(DEVICE)).item()
+                preds = (val_out > 0.5).float()
+                accuracy = (preds == y_val.to(DEVICE)).float().mean().item()
+            else:
+                val_loss = 0.0
+                accuracy = 0.0
             
-        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {total_loss/len(train_loader):.4f} | Val Loss: {val_loss:.4f} | Val Acc: {accuracy:.4f}")
+        print(f"[{model_name}] Epoch {epoch+1}/{EPOCHS} | Train Loss: {total_loss/len(train_loader):.4f} | Val Loss: {val_loss:.4f} | Val Acc: {accuracy:.4f}")
+    return model
 
-    # 5. Save
+def main():
+    # 1. Load
+    df = load_data_from_bq()
+    if df.empty:
+        print("No data. Exiting.")
+        return
+
+    # 2. Preprocess
+    sparse_x, dense_x, y_ctr, y_cvr, splits, encoders, scaler = preprocess_data(df)
+    
+    train_mask = splits == 'TRAIN'
+    val_mask = splits == 'VALIDATE'
+    
+    # --- CTR Data ---
+    X_train_sparse_ctr = torch.tensor(sparse_x[train_mask], dtype=torch.long)
+    X_train_dense_ctr = torch.tensor(dense_x[train_mask], dtype=torch.float32)
+    y_train_ctr = torch.tensor(y_ctr[train_mask], dtype=torch.float32)
+    
+    X_val_sparse_ctr = torch.tensor(sparse_x[val_mask], dtype=torch.long)
+    X_val_dense_ctr = torch.tensor(dense_x[val_mask], dtype=torch.float32)
+    y_val_ctr = torch.tensor(y_ctr[val_mask], dtype=torch.float32)
+    
+    # --- CVR Data (Only Clicked Requests) ---
+    cvr_train_mask = train_mask & (y_ctr == 1.0)
+    cvr_val_mask = val_mask & (y_ctr == 1.0)
+    
+    X_train_sparse_cvr = torch.tensor(sparse_x[cvr_train_mask], dtype=torch.long)
+    X_train_dense_cvr = torch.tensor(dense_x[cvr_train_mask], dtype=torch.float32)
+    y_train_cvr = torch.tensor(y_cvr[cvr_train_mask], dtype=torch.float32)
+    
+    X_val_sparse_cvr = torch.tensor(sparse_x[cvr_val_mask], dtype=torch.long)
+    X_val_dense_cvr = torch.tensor(dense_x[cvr_val_mask], dtype=torch.float32)
+    y_val_cvr = torch.tensor(y_cvr[cvr_val_mask], dtype=torch.float32)
+    
+    sparse_dims = [len(enc.classes_) for enc in encoders.values()]
+    dense_dim = len(DENSE_FEATURES)
+    print(f"Model Config: Sparse Dims={sparse_dims}, Dense Dim={dense_dim}, Embedding Dim={EMBEDDING_DIM}")
+
+    # 3. Train CTR Model
+    train_dataset_ctr = TensorDataset(X_train_sparse_ctr, X_train_dense_ctr, y_train_ctr)
+    train_loader_ctr = DataLoader(train_dataset_ctr, batch_size=BATCH_SIZE, shuffle=True)
+    model_ctr = DeepFM(sparse_dims, dense_dim, EMBEDDING_DIM, DNN_HIDDEN_UNITS, DNN_DROPOUT).to(DEVICE)
+    model_ctr = train_model(model_ctr, train_loader_ctr, X_val_sparse_ctr, X_val_dense_ctr, y_val_ctr, "CTR")
+    
+    # 4. Train CVR Model
+    if len(X_train_sparse_cvr) > 0:
+        cvr_batch_size = min(BATCH_SIZE, max(1, len(X_train_sparse_cvr) // 2))
+        train_dataset_cvr = TensorDataset(X_train_sparse_cvr, X_train_dense_cvr, y_train_cvr)
+        train_loader_cvr = DataLoader(train_dataset_cvr, batch_size=cvr_batch_size, shuffle=True)
+        model_cvr = DeepFM(sparse_dims, dense_dim, EMBEDDING_DIM, DNN_HIDDEN_UNITS, DNN_DROPOUT).to(DEVICE)
+        model_cvr = train_model(model_cvr, train_loader_cvr, X_val_sparse_cvr, X_val_dense_cvr, y_val_cvr, "CVR")
+    else:
+        print("Warning: No clicked samples found for CVR training. Skipping CVR model.")
+        model_cvr = None
+
+    # 5. Save & Upload
     output_dir = Path("artifacts_deepfm")
     output_dir.mkdir(exist_ok=True)
     
@@ -324,27 +359,33 @@ def main():
         "label_encoders": {k: list(v.classes_) for k, v in encoders.items()},
         "model_type": "deepfm"
     }
-    with open(output_dir / "feature_config.json", "w") as f:
+    config_path = output_dir / "feature_config.json"
+    with open(config_path, "w") as f:
         json.dump(feature_config, f)
         
-    torch.save(model.state_dict(), output_dir / "deepfm_model.pt")
-    onnx_path = output_dir / "deepfm_model.onnx"
-    export_onnx(model, sparse_dims, dense_dim, onnx_path)
+    onnx_ctr_path = output_dir / "deepfm_ctr.onnx"
+    export_onnx(model_ctr, sparse_dims, dense_dim, onnx_ctr_path, out_name='pctr')
     
-    # Upload to GCS
+    if model_cvr is not None:
+        onnx_cvr_path = output_dir / "deepfm_cvr.onnx"
+        export_onnx(model_cvr, sparse_dims, dense_dim, onnx_cvr_path, out_name='pcvr')
+        
     try:
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        upload_to_gcs(str(onnx_path), f"models/pctr/deepfm_model_{timestamp}.onnx")
-        upload_to_gcs(str(onnx_path), "models/pctr/deepfm_model_latest.onnx")
-        
-        # Also upload feature config
-        config_path = output_dir / "feature_config.json"
+        upload_to_gcs(str(onnx_ctr_path), f"models/pctr/deepfm_model_{timestamp}.onnx")
+        upload_to_gcs(str(onnx_ctr_path), "models/pctr/deepfm_model_latest.onnx")
         upload_to_gcs(str(config_path), f"models/pctr/feature_config_deepfm_{timestamp}.json")
         upload_to_gcs(str(config_path), "models/pctr/feature_config_deepfm_latest.json")
+        
+        if model_cvr is not None:
+            upload_to_gcs(str(onnx_cvr_path), f"models/pcvr/deepfm_model_{timestamp}.onnx")
+            upload_to_gcs(str(onnx_cvr_path), "models/pcvr/deepfm_model_latest.onnx")
+            upload_to_gcs(str(config_path), f"models/pcvr/feature_config_deepfm_{timestamp}.json")
+            upload_to_gcs(str(config_path), "models/pcvr/feature_config_deepfm_latest.json")
     except Exception as e:
         print(f"Failed to upload to GCS: {e}")
     
-    print("DeepFM training pipeline finished successfully.")
+    print("Dual DeepFM training pipeline (CTR & CVR) finished successfully.")
 
 if __name__ == "__main__":
     main()
