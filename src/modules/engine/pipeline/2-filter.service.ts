@@ -134,12 +134,15 @@ export class FilterService implements PipelineStep {
 
                 switch (pacingType) {
                     case 1: // EVEN (Strictly follow time)
-                        // If spent 50% but time is only 30%, drop probability is high
-                        if (dailySpendProgress > dailyTimeProgress) {
-                            // The further ahead we are, the higher the drop chance
+                        // Allow a tiny 2% buffer. If spend exceeds time + 2%, strongly throttle.
+                        if (dailySpendProgress > dailyTimeProgress + 0.02) {
                             const overspendRatio = dailySpendProgress - dailyTimeProgress;
-                            // throttleRate scales with overspend (e.g. 5% ahead = 50% drop chance)
-                            const throttleRate = Math.min(overspendRatio * 10, 0.95);
+                            // Steep penalty: 5% ahead = 50% drop, 10% ahead = 100% drop.
+                            let throttleRate = overspendRatio * 10;
+                            // If overspend is absurdly high (e.g. 20% ahead), drop definitively.
+                            if (overspendRatio > 0.10) {
+                                throttleRate = 1.0;
+                            }
                             shouldDrop = Math.random() < throttleRate;
                         }
                         break;
@@ -149,7 +152,11 @@ export class FilterService implements PipelineStep {
                         const aggressiveTarget = Math.min(dailyTimeProgress * 1.3, 1.0);
                         if (dailySpendProgress > aggressiveTarget) {
                             const overspendRatio = dailySpendProgress - aggressiveTarget;
-                            const throttleRate = Math.min(overspendRatio * 5, 0.90);
+                            // Steeper penalty for aggressive overspend
+                            let throttleRate = overspendRatio * 15;
+                            if (overspendRatio > 0.05) {
+                                throttleRate = 1.0;
+                            }
                             shouldDrop = Math.random() < throttleRate;
                         }
                         break;
