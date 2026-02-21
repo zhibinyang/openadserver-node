@@ -47,7 +47,11 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                 const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=cpc&utm_campaign=${c.campaign_id}`;
 
                 // External click-through URL
-                const landingUrl = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}`;
+                const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
+                const impCost = c.bid_type === 1 || c.bid_type === 4 ? c.bid / 1000 : 0; // CPM/OCPM = 1/4
+
+                const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
+                const landingUrl = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
 
                 return {
                     ad_id: `ad_${c.campaign_id}_${c.creative_id}`,
@@ -58,9 +62,9 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                     image_url: c.image_url,
                     video_url: c.video_url,
                     landing_url: landingUrl,
-                    imp_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp`,
-                    click_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=click`,
-                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion&conversion_value=\${CONVERSION_VALUE}`,
+                    imp_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp${trackingQuery}&cost=${impCost}`,
+                    click_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=click${trackingQuery}&cost=${clickCost}`,
+                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion${trackingQuery}&conversion_value=\${CONVERSION_VALUE}`,
                 };
             })
         );
@@ -108,17 +112,21 @@ export class VastResponseBuilder implements AdResponseBuilder {
         const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=video`;
 
         // External click-through URL
-        const clickThrough = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}`;
+        const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
+        const impCost = c.bid_type === 1 || c.bid_type === 4 ? c.bid / 1000 : 0; // CPM/OCPM = 1/4
+        const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
+
+        const clickThrough = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
 
         const tracking = {
-            impression: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp`,
+            impression: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp${trackingQuery}&cost=${impCost}`,
             clickThrough: clickThrough,
-            clickTracking: `${baseUrl}/tracking/track?click_id=${clickId}&type=click`,
-            start: `${baseUrl}/tracking/track?click_id=${clickId}&type=start`,
-            firstQuartile: `${baseUrl}/tracking/track?click_id=${clickId}&type=firstQuartile`,
-            midpoint: `${baseUrl}/tracking/track?click_id=${clickId}&type=midpoint`,
-            thirdQuartile: `${baseUrl}/tracking/track?click_id=${clickId}&type=thirdQuartile`,
-            complete: `${baseUrl}/tracking/track?click_id=${clickId}&type=complete`,
+            clickTracking: `${baseUrl}/tracking/track?click_id=${clickId}&type=click${trackingQuery}&cost=${clickCost}`,
+            start: `${baseUrl}/tracking/track?click_id=${clickId}&type=start${trackingQuery}`,
+            firstQuartile: `${baseUrl}/tracking/track?click_id=${clickId}&type=firstQuartile${trackingQuery}`,
+            midpoint: `${baseUrl}/tracking/track?click_id=${clickId}&type=midpoint${trackingQuery}`,
+            thirdQuartile: `${baseUrl}/tracking/track?click_id=${clickId}&type=thirdQuartile${trackingQuery}`,
+            complete: `${baseUrl}/tracking/track?click_id=${clickId}&type=complete${trackingQuery}`,
         };
 
         return this.vastBuilder.build(c, tracking, requestId);

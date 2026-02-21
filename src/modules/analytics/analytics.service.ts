@@ -8,6 +8,8 @@ import { AdCandidate, UserContext, EventType } from '../../shared/types';
 import { DRIZZLE } from '../../database/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/schema';
+import { RedisService } from '../../shared/redis/redis.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 enum WriteTarget {
     POSTGRES = 'POSTGRES',
@@ -23,14 +25,17 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     private bqClient: BigQueryWriteClient;
     private root: protobuf.Root;
     private AdEventMessage: protobuf.Type;
+    private CampaignHourlyMessage: protobuf.Type;
 
     private readonly projectId = process.env.GOOGLE_CLOUD_PROJECT || 'openadserver';
     private readonly datasetId = process.env.BQ_DATASET || 'analytics';
     private readonly tableId = process.env.BQ_TABLE || 'ad_events';
+    private readonly hourlyTableId = 'campaign_hourly_performance';
     private readonly writeTarget: WriteTarget;
 
     constructor(
         @Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>,
+        private readonly redisService: RedisService,
     ) {
         this.bqClient = new BigQueryWriteClient();
         this.initializeProto();
@@ -75,10 +80,29 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 double ecpm = 25;
                 string page_context = 26;
             }
+
+            message CampaignHourlyPerformance {
+                int64 log_timestamp = 1;
+                int32 campaign_id = 2;
+                string campaign_name = 3;
+                int32 advertiser_id = 4;
+                int32 status = 5;
+                bool is_active = 6;
+                int32 bid_type = 7;
+                double bid_amount = 8;
+                int32 pacing_type = 9;
+                int64 start_time = 10;
+                int64 end_time = 11;
+                double budget_daily = 12;
+                double budget_total = 13;
+                double spent_today = 14;
+                double spent_total = 15;
+            }
         `;
         const { parse } = protobuf;
         this.root = parse(protoDefinition, { keepCase: true }).root;
         this.AdEventMessage = this.root.lookupType("AdEvent");
+        this.CampaignHourlyMessage = this.root.lookupType("CampaignHourlyPerformance");
     }
 
     onModuleInit() {
@@ -237,7 +261,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
             writeStream: writeStream,
             protoRows: {
                 writerSchema: {
-                    protoDescriptor: this.getProtoDescriptor(),
+                    protoDescriptor: this.getProtoDescriptor(this.AdEventMessage, "AdEvent"),
                 },
                 rows: {
                     serializedRows: protoRows,
@@ -269,7 +293,154 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
         });
     }
 
-    private getProtoDescriptor() {
+    @Cron(CronExpression.EVERY_HOUR)
+    async logHourlyCampaignPerformance() {
+        this.logger.log('Executing hourly campaign performance logging...');
+        try {
+            // 1. Fetch campaigns from DB
+            const campaigns = await this.db.query.campaigns.findMany();
+            if (campaigns.length === 0) return;
+
+            // 2. Fetch spend from Redis
+            const date = new Date().toISOString().split('T')[0];
+            const pipeline = this.redisService.client.pipeline();
+
+            for (const c of campaigns) {
+                const dailyKey = `budget:${c.id}:${date}`;
+                const totalKey = `budget:total:${c.id}`;
+                pipeline.hget(dailyKey, 'spent_today');
+                pipeline.hget(totalKey, 'spent_total');
+            }
+
+            const results = await pipeline.exec();
+
+            const rows = [];
+            const logTimestamp = Date.now();
+
+            for (let i = 0; i < campaigns.length; i++) {
+                const c = campaigns[i];
+                const spentTodayResult = results?.[i * 2]?.[1];
+                const spentTotalResult = results?.[i * 2 + 1]?.[1];
+
+                const spentToday = parseFloat((spentTodayResult as string) || '0');
+                const spentTotal = parseFloat((spentTotalResult as string) || '0');
+
+                rows.push({
+                    log_timestamp: logTimestamp,
+                    campaign_id: Number(c.id),
+                    campaign_name: c.name || '',
+                    advertiser_id: Number(c.advertiser_id) || 0,
+                    status: c.status || 0,
+                    is_active: c.is_active || false,
+                    bid_type: c.bid_type || 0,
+                    bid_amount: parseFloat(c.bid_amount?.toString() || '0'),
+                    pacing_type: c.pacing_type || 1,
+                    start_time: c.start_time ? c.start_time.getTime() : 0,
+                    end_time: c.end_time ? c.end_time.getTime() : 0,
+                    budget_daily: parseFloat(c.budget_daily?.toString() || '0'),
+                    budget_total: parseFloat(c.budget_total?.toString() || '0'),
+                    spent_today: spentToday,
+                    spent_total: spentTotal,
+                });
+            }
+
+            if (this.writeTarget === WriteTarget.BIGQUERY || this.writeTarget === WriteTarget.BOTH) {
+                await this.writeHourlyToBigQuery(rows);
+            }
+            if (this.writeTarget === WriteTarget.POSTGRES || this.writeTarget === WriteTarget.BOTH) {
+                await this.writeHourlyToPostgres(rows);
+            }
+
+            this.logger.log(`Successfully logged ${rows.length} campaigns to hourly performance table(s).`);
+        } catch (err) {
+            this.logger.error('Failed to log hourly campaign performance', err);
+        }
+    }
+
+    private async writeHourlyToBigQuery(rows: any[]) {
+        const parent = `projects/${this.projectId}/datasets/${this.datasetId}/tables/${this.hourlyTableId}`;
+        const writeStream = `${parent}/_default`;
+
+        const protoRows = rows.map(row => {
+            const payload = {
+                log_timestamp: row.log_timestamp * 1000, // micros
+                campaign_id: row.campaign_id,
+                campaign_name: row.campaign_name,
+                advertiser_id: row.advertiser_id,
+                status: row.status,
+                is_active: row.is_active,
+                bid_type: row.bid_type,
+                bid_amount: row.bid_amount,
+                pacing_type: row.pacing_type,
+                start_time: row.start_time * 1000, // micros
+                end_time: row.end_time * 1000, // micros
+                budget_daily: row.budget_daily,
+                budget_total: row.budget_total,
+                spent_today: row.spent_today,
+                spent_total: row.spent_total,
+            };
+
+            const err = this.CampaignHourlyMessage.verify(payload);
+            if (err) {
+                this.logger.error(`CampaignHourly Proto verification failed: ${err}`, payload);
+                return null;
+            }
+
+            const message = this.CampaignHourlyMessage.create(payload);
+            return this.CampaignHourlyMessage.encode(message).finish();
+        }).filter(Boolean);
+
+        if (protoRows.length === 0) return;
+
+        const request = {
+            writeStream: writeStream,
+            protoRows: {
+                writerSchema: {
+                    protoDescriptor: this.getProtoDescriptor(this.CampaignHourlyMessage, "CampaignHourlyPerformance"),
+                },
+                rows: {
+                    serializedRows: protoRows,
+                },
+            },
+        };
+
+        const stream = await this.bqClient.appendRows();
+        return new Promise<void>((resolve, reject) => {
+            stream.on('data', (data: any) => {
+                if (data.error) reject(new Error(JSON.stringify(data.error)));
+                else resolve();
+            });
+            stream.on('error', (err: any) => reject(err));
+            stream.write(request);
+            stream.end();
+        });
+    }
+
+    private async writeHourlyToPostgres(rows: any[]) {
+        if (rows.length === 0) return;
+
+        const pgRows = rows.map(row => ({
+            log_timestamp: new Date(row.log_timestamp),
+            campaign_id: row.campaign_id,
+            campaign_name: row.campaign_name,
+            advertiser_id: row.advertiser_id,
+            status: row.status,
+            is_active: row.is_active,
+            bid_type: row.bid_type,
+            bid_amount: row.bid_amount.toString(),
+            pacing_type: row.pacing_type,
+            start_time: row.start_time ? new Date(row.start_time) : null,
+            end_time: row.end_time ? new Date(row.end_time) : null,
+            budget_daily: row.budget_daily.toString(),
+            budget_total: row.budget_total.toString(),
+            spent_today: row.spent_today.toString(),
+            spent_total: row.spent_total.toString(),
+        }));
+
+        await this.db.insert(schema.campaign_hourly_performance).values(pgRows);
+    }
+
+    private getProtoDescriptor(messageType: protobuf.Type, messageName: string) {
         // Manual construction to avoid protobufjs toDescriptor compatibility issues
         const fields = [];
         // Map proto types to DescriptorProto.Type enum values
@@ -294,8 +465,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
             'sint64': 18
         };
 
-        for (const key in this.AdEventMessage.fields) {
-            const field = this.AdEventMessage.fields[key];
+        for (const key in messageType.fields) {
+            const field = messageType.fields[key];
             fields.push({
                 name: field.name,
                 number: field.id,
@@ -306,7 +477,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
         }
 
         return {
-            name: "AdEvent",
+            name: messageName,
             field: fields
         };
     }

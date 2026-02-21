@@ -32,14 +32,14 @@ export class TrackingService {
 
         // Try click_id-based tracking (lightweight)
         if (dto.click_id) {
-            // We NO LONGER fetch context from Redis.
-            // We rely on DB to join 'click_id' with the original 'REQUEST' event.
-            campaignId = 0; // Unknown
-            creativeId = 0; // Unknown
-            userId = '';    // Unknown
-            requestId = ''; // Unknown
+            // If cid/crid are passed in the URL (restored for real-time pacing), use them.
+            // Otherwise default to 0 and rely on offline BQ joins.
+            campaignId = dto.cid ? parseInt(dto.cid, 10) : 0;
+            creativeId = dto.crid ? parseInt(dto.crid, 10) : 0;
+            userId = dto.uid || '';
+            requestId = ''; // Unknown unless passed
 
-            this.logger.log(`Tracking via click_id: ${dto.click_id} (Lightweight - Log & Join)`);
+            this.logger.log(`Tracking event (click_id: ${dto.click_id}, cid: ${campaignId}, crid: ${creativeId})`);
         }
         // Fallback to legacy method (cid/crid)
         else if (dto.cid && dto.crid) {

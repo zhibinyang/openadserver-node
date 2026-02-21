@@ -24,7 +24,7 @@ async function testConnection() {
     }
 
     console.log('\n[STEP 1] Initializing AnalyticsService...');
-    const service = new AnalyticsService(null as any);
+    const service = new AnalyticsService(null as any, null as any);
 
     console.log('[STEP 2] Attempting to write ONE test row...');
 

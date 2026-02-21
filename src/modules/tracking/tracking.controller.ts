@@ -31,6 +31,8 @@ export class TrackingController {
         @Query('p') pctr: string,
         @Query('rid') requestId: string,
         @Query('to') to: string,
+        @Query('cid') cid: string,
+        @Query('crid') crid: string,
         @Res() res: FastifyReply,
     ) {
         // Validate required parameter
@@ -43,6 +45,9 @@ export class TrackingController {
             this.trackingService.track({
                 type: 'click' as any,
                 click_id: clickId,
+                cid,
+                crid,
+                cost: bid, // Pass bid as the cost for CPC campaigns
             }).catch(err => console.error('Click tracking failed:', err));
         }
 

@@ -223,3 +223,23 @@ export const hourly_stats = pgTable('hourly_stats', {
     ctr: numeric('ctr', { precision: 8, scale: 6 }).default('0'),
     cvr: numeric('cvr', { precision: 8, scale: 6 }).default('0'),
 });
+
+// --- CAMPAIGN HOURLY PERFORMANCE ---
+export const campaign_hourly_performance = pgTable('campaign_hourly_performance', {
+    id: serial('id').primaryKey(),
+    log_timestamp: timestamp('log_timestamp').notNull(),
+    campaign_id: integer('campaign_id').notNull(),
+    campaign_name: varchar('campaign_name', { length: 255 }),
+    advertiser_id: integer('advertiser_id'),
+    status: integer('status'),
+    is_active: boolean('is_active'),
+    bid_type: integer('bid_type'),
+    bid_amount: numeric('bid_amount', { precision: 12, scale: 4 }),
+    pacing_type: integer('pacing_type'),
+    start_time: timestamp('start_time'),
+    end_time: timestamp('end_time'),
+    budget_daily: numeric('budget_daily', { precision: 12, scale: 4 }),
+    budget_total: numeric('budget_total', { precision: 12, scale: 4 }),
+    spent_today: numeric('spent_today', { precision: 12, scale: 4 }),
+    spent_total: numeric('spent_total', { precision: 12, scale: 4 }),
+});
