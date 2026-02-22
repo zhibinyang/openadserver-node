@@ -78,6 +78,7 @@ export interface AdCandidate {
     // Calculated scores
     ecpm?: number; // Effective CPM
     score?: number; // Final ranking score
+    actual_cost?: number; // The exact price to pay based on GSP
 
     // Creative info
     title?: string;

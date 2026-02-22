@@ -33,6 +33,25 @@ export class RankingService implements PipelineStep {
         sorted.forEach((c, i) => {
             const bidType = BID_TYPE_NAMES[c.bid_type] || 'UNKNOWN';
 
+            // Generalized Second Price (GSP) Calculation
+            const nextEcpm = (i + 1 < sorted.length) ? (sorted[i + 1].score || 0) : 0;
+            const pctr = c.pctr || 0.0001;
+            const pcvr = c.pcvr || 0.0001;
+
+            let requiredBid = 0;
+            if (c.bid_type === BidType.CPM) {
+                requiredBid = nextEcpm;
+            } else if (c.bid_type === BidType.CPC) {
+                // eCPM = Bid * pCTR * 1000 => Bid = eCPM / (pCTR * 1000)
+                requiredBid = nextEcpm / (pctr * 1000);
+            } else if (c.bid_type === BidType.CPA || c.bid_type === BidType.OCPM) {
+                // eCPM = Bid * pCTR * pCVR * 1000 => Bid = eCPM / (pCTR * pCVR * 1000)
+                requiredBid = nextEcpm / (pctr * pcvr * 1000);
+            }
+
+            // GSP Floor is 0.01, Ceiling is the advertiser's actual bid
+            c.actual_cost = Math.min(c.bid, Math.max(0.01, requiredBid));
+
             const adjPctr = c.pctr || 0;
             const adjPcvr = c.pcvr || 0;
             const ctrFactor = c.ctr_factor || 1.0;
@@ -48,7 +67,7 @@ export class RankingService implements PipelineStep {
             else origEcpm = c.bid * origPctr * origPcvr * 1000;
 
             this.logger.log(
-                `  #${i + 1} | Camp=${c.campaign_id} Cre=${c.creative_id} | ${bidType} $${c.bid} | pCTR=${origPctr.toFixed(6)} pCVR=${origPcvr.toFixed(6)} | eCPM=${origEcpm.toFixed(4)} | calib(CTRx${ctrFactor.toFixed(2)}, CVRx${cvrFactor.toFixed(2)}) | adj_eCPM=${c.ecpm?.toFixed(4)}`
+                `  #${i + 1} | Camp=${c.campaign_id} Cre=${c.creative_id} | ${bidType} Bid=$${c.bid} Cost=$${c.actual_cost?.toFixed(4)} | pCTR=${origPctr.toFixed(6)} pCVR=${origPcvr.toFixed(6)} | eCPM=${origEcpm.toFixed(4)} | calib(CTRx${ctrFactor.toFixed(2)}, CVRx${cvrFactor.toFixed(2)}) | adj_eCPM=${c.ecpm?.toFixed(4)}`
             );
         });
 

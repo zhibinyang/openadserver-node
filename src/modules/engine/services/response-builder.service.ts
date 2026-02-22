@@ -32,8 +32,9 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                 const clickId = c.click_id || randomUUID();
 
                 // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
-                const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
-                const convCost = c.bid_type === 3 ? c.bid : 0; // CPA = 3
+                const costToPay = c.actual_cost ?? c.bid;
+                const clickCost = c.bid_type === 2 ? costToPay : 0; // CPC = 2
+                const convCost = c.bid_type === 3 || c.bid_type === 4 ? costToPay : 0; // CPA = 3, OCPM = 4 (for OCPM, cost is charged primarily on conversion ideally, or imp? If imp, why convCost here earlier wasn't set? In original, it was `c.bid_type === 3`. Wait, OCPM is usually charged by impression based on eCPM. Let's trace impCost.)
                 await this.redisService.set(`click:${clickId}`, JSON.stringify({
                     requestId,
                     campaignId: c.campaign_id,
@@ -64,7 +65,11 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                 const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=cpc&utm_campaign=${c.campaign_id}`;
 
                 // External click-through URL
-                const impCost = c.bid_type === 1 ? c.bid / 1000 : (c.bid_type === 4 ? (c.ecpm || 0) / 1000 : 0); // CPM = 1, OCPM = 4
+                // CPM is charged per impression. OCPM is effectively charged per impression based on eCPM.
+                // Reconstruct eCPM-based impression cost for OCPM: (c.actual_cost * pCTR * pCVR * 1000) / 1000 = c.actual_cost * pCTR * pCVR.
+                // But simplier: OCPM eCPM = actual_cost * pctr * pcvr * 1000. So per imp cost = eCPM / 1000.
+                const ocpmEcpm = (costToPay * (c.pctr || 0) * (c.pcvr || 0) * 1000);
+                const impCost = c.bid_type === 1 ? costToPay / 1000 : (c.bid_type === 4 ? ocpmEcpm / 1000 : 0); // CPM = 1, OCPM = 4
 
                 const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
                 const landingUrl = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
@@ -113,8 +118,9 @@ export class VastResponseBuilder implements AdResponseBuilder {
         const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
         // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
-        const clickCost = c.bid_type === 2 ? c.bid : 0; // CPC = 2
-        const convCost = c.bid_type === 3 ? c.bid : 0; // CPA = 3
+        const costToPay = c.actual_cost ?? c.bid;
+        const clickCost = c.bid_type === 2 ? costToPay : 0; // CPC = 2
+        const convCost = c.bid_type === 3 || c.bid_type === 4 ? costToPay : 0; // CPA = 3, OCPM = 4
         await this.redisService.set(`click:${clickId}`, JSON.stringify({
             requestId,
             campaignId: c.campaign_id,
@@ -145,7 +151,8 @@ export class VastResponseBuilder implements AdResponseBuilder {
         const internalUrl = `${originalLandingUrl}${urlSeparator}click_id=${clickId}&utm_source=openadserver&utm_medium=video`;
 
         // External click-through URL
-        const impCost = c.bid_type === 1 ? c.bid / 1000 : (c.bid_type === 4 ? (c.ecpm || 0) / 1000 : 0); // CPM = 1, OCPM = 4
+        const ocpmEcpm = (costToPay * (c.pctr || 0) * (c.pcvr || 0) * 1000);
+        const impCost = c.bid_type === 1 ? costToPay / 1000 : (c.bid_type === 4 ? ocpmEcpm / 1000 : 0); // CPM = 1, OCPM = 4
         const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
 
         const clickThrough = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
