@@ -1,4 +1,4 @@
-const API_BASE = 'https://localhost:3000/api/v1';
+const API_BASE = 'http://localhost:3000/api/v1';
 
 async function postData(url: string, data: any) {
     const response = await fetch(`${API_BASE}${url}`, {
@@ -27,7 +27,8 @@ async function main() {
             daily_budget: '0',
             balance: '5000000'
         });
-        const advertiserId = advData.id;
+        console.log(advData)
+        const advertiserId = advData[0].id;
         console.log(`✅ Advertiser created with ID: ${advertiserId}`);
 
         console.log('\n2. Creating Campaign...');
@@ -45,11 +46,11 @@ async function main() {
             end_time: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // +30 days
             status: 1
         });
-        const campaignId = campData.id;
+        const campaignId = campData[0].id;
         console.log(`✅ Campaign created with ID: ${campaignId}`);
 
         console.log('\n3. Creating Targeting Rules...');
-        await postData('/targeting_rules', {
+        await postData('/targeting', {
             campaign_id: campaignId,
             rule_type: 'geo',
             rule_value: {
