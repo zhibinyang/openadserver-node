@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { PipelineStep } from './step.interface';
 import { AdCandidate, UserContext } from '../../../shared/types';
+import { CalibrationService } from '../services/calibration.service';
 
 interface FeatureConfig {
     sparse_features: string[];
@@ -31,6 +32,8 @@ export class PredictionService implements PipelineStep, OnModuleInit {
     private readonly CONFIG_PATH = process.env.FEATURE_CONFIG_PATH || path.join(process.cwd(), 'models', 'feature_config_latest.json');
 
     private readonly logger = new Logger(PredictionService.name);
+
+    constructor(private readonly calibrationService: CalibrationService) { }
 
     async onModuleInit() {
         try {
@@ -156,11 +159,23 @@ export class PredictionService implements PipelineStep, OnModuleInit {
             const outputCvr = resultsCvr.pcvr || resultsCvr[this.sessionCvr.outputNames[0]];
             const pcvrValues = outputCvr.data as Float32Array;
 
-            // 3. Assign scores
-            for (let i = 0; i < candidates.length; i++) {
-                candidates[i].pctr = Number(pctrValues[i]);
-                candidates[i].pcvr = Number(pcvrValues[i]);
-            }
+            // 3. Assign scores and Calibrate
+            await Promise.all(candidates.map(async (c, i) => {
+                const rawPctr = Number(pctrValues[i]);
+                const rawPcvr = Number(pcvrValues[i]);
+
+                const calib = await this.calibrationService.getCalibratedPredictions(
+                    c.campaign_id,
+                    context.slot_id || 'unknown',
+                    rawPctr,
+                    rawPcvr
+                );
+
+                c.pctr = calib.pctr;
+                c.pcvr = calib.pcvr;
+                c.ctr_factor = calib.ctr_factor;
+                c.cvr_factor = calib.cvr_factor;
+            }));
 
             this.logMetrics(candidates, Date.now() - start, 'onnx_dual');
 

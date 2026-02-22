@@ -32,10 +32,23 @@ export class RankingService implements PipelineStep {
         this.logger.log(`Ranked ${sorted.length} candidates:`);
         sorted.forEach((c, i) => {
             const bidType = BID_TYPE_NAMES[c.bid_type] || 'UNKNOWN';
-            const pctr = c.pctr != null ? c.pctr.toFixed(6) : 'N/A';
-            const pcvr = c.pcvr != null ? c.pcvr.toFixed(6) : 'N/A';
+
+            const adjPctr = c.pctr || 0;
+            const adjPcvr = c.pcvr || 0;
+            const ctrFactor = c.ctr_factor || 1.0;
+            const cvrFactor = c.cvr_factor || 1.0;
+
+            // Reconstruct original values before calibration
+            const origPctr = adjPctr / ctrFactor;
+            const origPcvr = adjPcvr / cvrFactor;
+
+            let origEcpm = 0;
+            if (c.bid_type === BidType.CPM) origEcpm = c.bid;
+            else if (c.bid_type === BidType.CPC) origEcpm = c.bid * origPctr * 1000;
+            else origEcpm = c.bid * origPctr * origPcvr * 1000;
+
             this.logger.log(
-                `  #${i + 1} | Camp=${c.campaign_id} Cre=${c.creative_id} | ${bidType} $${c.bid} | pCTR=${pctr} pCVR=${pcvr} | eCPM=${c.ecpm?.toFixed(4)}`
+                `  #${i + 1} | Camp=${c.campaign_id} Cre=${c.creative_id} | ${bidType} $${c.bid} | pCTR=${origPctr.toFixed(6)} pCVR=${origPcvr.toFixed(6)} | eCPM=${origEcpm.toFixed(4)} | calib(CTRx${ctrFactor.toFixed(2)}, CVRx${cvrFactor.toFixed(2)}) | adj_eCPM=${c.ecpm?.toFixed(4)}`
             );
         });
 

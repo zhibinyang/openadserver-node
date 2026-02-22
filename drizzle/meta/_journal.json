@@ -71,6 +71,13 @@
       "when": 1771681631493,
       "tag": "0009_strong_human_robot",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771718831005,
+      "tag": "0010_clear_harry_osborn",
+      "breakpoints": true
     }
   ]
 }

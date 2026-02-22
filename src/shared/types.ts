@@ -72,6 +72,8 @@ export interface AdCandidate {
     // Predicted scores
     pctr?: number; // Predicted CTR
     pcvr?: number; // Predicted CVR
+    ctr_factor?: number; // CTR Calibration Factor
+    cvr_factor?: number; // CVR Calibration Factor
 
     // Calculated scores
     ecpm?: number; // Effective CPM

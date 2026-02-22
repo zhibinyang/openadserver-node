@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS `analytics.ad_events` (
   slot_id STRING,
   bid_type INT64,              -- BidType enum (1=CPM, 2=CPC, 3=CPA, 4=OCPM)
   ecpm FLOAT64,                -- Effective CPM
-  page_context STRING           -- Page context info from the requesting page
+  page_context STRING,          -- Page context info from the requesting page
+  pctr FLOAT64,                -- Predicted CTR at time of impression
+  pcvr FLOAT64                 -- Predicted CVR at time of impression
 )
 PARTITION BY DATE(event_time)  -- Partition by day for cost/performance optimization
 CLUSTER BY campaign_id, event_type; -- Cluster for faster filtering

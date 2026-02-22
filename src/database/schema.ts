@@ -177,6 +177,9 @@ export const ad_events = pgTable('ad_events', {
     bid: numeric('bid', { precision: 12, scale: 6 }).default('0'),
     price: numeric('price', { precision: 12, scale: 6 }).default('0'), // Actual price paid
 
+    pctr: numeric('pctr', { precision: 12, scale: 6 }).default('0'),
+    pcvr: numeric('pcvr', { precision: 12, scale: 6 }).default('0'),
+
     cost: numeric('cost', { precision: 12, scale: 6 }).default('0'),
 
     // New fields

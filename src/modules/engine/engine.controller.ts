@@ -78,6 +78,8 @@ export class EngineController {
                 bid_type: c.bid_type,
                 ecpm: c.ecpm || null,
                 page_context: context.page_context || null,
+                pctr: c.pctr || null,
+                pcvr: c.pcvr || null,
             });
         });
 
@@ -128,6 +130,8 @@ export class EngineController {
                 bid_type: c.bid_type,
                 ecpm: c.ecpm || null,
                 page_context: context.page_context || null,
+                pctr: c.pctr || null,
+                pcvr: c.pcvr || null,
             });
         });
 

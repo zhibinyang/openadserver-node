@@ -49,6 +49,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    async expire(key: string, seconds: number): Promise<void> {
+        await this.redis.expire(key, seconds);
+    }
+
     async incr(key: string, ttlSeconds?: number): Promise<number> {
         const pipeline = this.redis.pipeline();
         pipeline.incr(key);

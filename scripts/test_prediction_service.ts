@@ -45,7 +45,17 @@ async function main() {
         }
     ];
 
-    const service = new PredictionService();
+    // Mock CalibrationService
+    const mockCalibrationService = {
+        getCalibratedPredictions: async (cid: number, sid: string, pctr: number, pcvr: number) => ({
+            pctr, pcvr, ctr_factor: 1, cvr_factor: 1
+        }),
+        logImpression: async () => { },
+        logClick: async () => { },
+        logConversion: async () => { },
+    } as any;
+
+    const service = new PredictionService(mockCalibrationService);
 
     // Manual init to simulate OnModuleInit
     console.log('Initializing service...');

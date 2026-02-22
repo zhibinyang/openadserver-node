@@ -5,6 +5,7 @@ import { TrackingDto, TrackingType } from './tracking.dto';
 import { EventType } from '../../shared/types';
 import { randomUUID } from 'crypto';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { CalibrationService } from '../engine/services/calibration.service';
 
 @Injectable()
 export class TrackingService {
@@ -13,6 +14,7 @@ export class TrackingService {
     constructor(
         private redisService: RedisService,
         private analyticsService: AnalyticsService,
+        private calibrationService: CalibrationService,
     ) { }
 
     async track(dto: TrackingDto): Promise<void> {
@@ -30,6 +32,9 @@ export class TrackingService {
         let city: string | undefined;
         let ip: string | undefined;
         let bid = 0;
+        let slotId: string | undefined;
+        let pctr = 0;
+        let pcvr = 0;
 
         // Try click_id-based tracking
         if (dto.click_id) {
@@ -47,6 +52,9 @@ export class TrackingService {
                     browser = parsed.browser;
                     country = parsed.country;
                     city = parsed.city;
+                    slotId = parsed.slotId;
+                    pctr = parsed.pctr || 0;
+                    pcvr = parsed.pcvr || 0;
                     // For click/conversion, adopt the pre-calculated contextual budget cost if the URL didn't specify it
                     if (!dto.cost || dto.cost === '0') {
                         if (dto.type === TrackingType.CLICK) bid = parsed.clickCost || 0;
@@ -120,15 +128,30 @@ export class TrackingService {
             bid: bid,
             price: cost,
             conversion_value: dto.conversion_value ? parseFloat(dto.conversion_value) : null,
+            pctr: pctr,
+            pcvr: pcvr,
         });
 
         // 3. Update Redis Counters
         // We cannot update budget/freq without campaign_id/user_id.
         // If campaignId is known (legacy path), we update.
         if (campaignId > 0) {
-            if (eventType === EventType.IMPRESSION && userId) {
-                const key = `freq:${userId}:${campaignId}`;
-                await this.redisService.incr(key, 86400); // 1 day TTL
+            if (eventType === EventType.IMPRESSION) {
+                if (userId) {
+                    const key = `freq:${userId}:${campaignId}`;
+                    await this.redisService.incr(key, 86400); // 1 day TTL
+                }
+                if (slotId) {
+                    await this.calibrationService.logImpression(campaignId, slotId, pctr);
+                }
+            } else if (eventType === EventType.CLICK) {
+                if (slotId) {
+                    await this.calibrationService.logClick(campaignId, slotId, pcvr);
+                }
+            } else if (eventType === EventType.CONVERSION) {
+                if (slotId) {
+                    await this.calibrationService.logConversion(campaignId, slotId);
+                }
             }
 
             if (cost > 0) {

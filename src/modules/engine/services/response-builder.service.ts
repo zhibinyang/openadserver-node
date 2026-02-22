@@ -44,6 +44,9 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                     browser: context.browser,
                     country: context.country,
                     city: context.city,
+                    slotId: context.slot_id || '',
+                    pctr: c.pctr || 0,
+                    pcvr: c.pcvr || 0,
                     clickCost,
                     convCost
                 }), this.CLICK_ID_TTL);
@@ -122,6 +125,9 @@ export class VastResponseBuilder implements AdResponseBuilder {
             browser: context.browser,
             country: context.country,
             city: context.city,
+            slotId: context.slot_id || '',
+            pctr: c.pctr || 0,
+            pcvr: c.pcvr || 0,
             clickCost,
             convCost
         }), this.CLICK_ID_TTL);

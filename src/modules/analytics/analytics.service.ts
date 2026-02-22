@@ -79,6 +79,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 int32 bid_type = 24;
                 double ecpm = 25;
                 string page_context = 26;
+                double pctr = 27;
+                double pcvr = 28;
             }
 
             message CampaignHourlyPerformance {
@@ -186,6 +188,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
             bid_type: event.bid_type || null,
             ecpm: event.ecpm != null ? event.ecpm.toString() : null,
             page_context: event.page_context || null,
+            pctr: event.pctr != null ? event.pctr.toString() : '0',
+            pcvr: event.pcvr != null ? event.pcvr.toString() : '0',
         });
     }
 
@@ -242,6 +246,8 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
                 bid_type: row.bid_type || 0,
                 ecpm: row.ecpm || 0.0,
                 page_context: row.page_context || '',
+                pctr: row.pctr || 0.0,
+                pcvr: row.pcvr || 0.0,
             };
 
             // Verify message
