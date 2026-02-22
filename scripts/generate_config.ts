@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000/api/v1';
+const API_BASE = 'https://localhost:3000/api/v1';
 
 async function postData(url: string, data: any) {
     const response = await fetch(`${API_BASE}${url}`, {
@@ -21,8 +21,8 @@ async function main() {
     try {
         console.log('1. Creating Advertiser...');
         const advData = await postData('/advertisers', {
-            name: 'Generated Advertiser',
-            company: 'AutoGen Inc.',
+            name: 'Advertiser C',
+            company: 'Campany C',
             status: 1,
             daily_budget: '0',
             balance: '5000000'
@@ -33,11 +33,11 @@ async function main() {
         console.log('\n2. Creating Campaign...');
         const campData = await postData('/campaigns', {
             advertiser_id: advertiserId,
-            name: 'Generated Auto Campaign',
-            budget_daily: '1000',
+            name: 'CPC Campaign',
+            budget_daily: '500',
             budget_total: '50000',
             bid_type: 4, // 4 = oCPM
-            bid_amount: '2.50',
+            bid_amount: '0.1',
             pacing_type: 1, // 1 = Even
             freq_cap_daily: 10,
             freq_cap_hourly: 3,
@@ -53,7 +53,7 @@ async function main() {
             campaign_id: campaignId,
             rule_type: 'geo',
             rule_value: {
-                countries: ["US", "CN", "JP", "IN", "SG", "GB", "DE", "FR"]
+                countries: ["CN", "JP", "IN", "GB", "DE", "FR"]
             },
             is_include: true
         });
