@@ -34,7 +34,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                 // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
                 const costToPay = c.actual_cost ?? c.bid;
                 const clickCost = c.bid_type === 2 ? costToPay : 0; // CPC = 2
-                const convCost = c.bid_type === 3 || c.bid_type === 4 ? costToPay : 0; // CPA = 3, OCPM = 4 (for OCPM, cost is charged primarily on conversion ideally, or imp? If imp, why convCost here earlier wasn't set? In original, it was `c.bid_type === 3`. Wait, OCPM is usually charged by impression based on eCPM. Let's trace impCost.)
+                const convCost = c.bid_type === 3 ? costToPay : 0; // CPA = 3. OCPM charges per impression.
                 await this.redisService.set(`click:${clickId}`, JSON.stringify({
                     requestId,
                     campaignId: c.campaign_id,
@@ -120,7 +120,7 @@ export class VastResponseBuilder implements AdResponseBuilder {
         // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
         const costToPay = c.actual_cost ?? c.bid;
         const clickCost = c.bid_type === 2 ? costToPay : 0; // CPC = 2
-        const convCost = c.bid_type === 3 || c.bid_type === 4 ? costToPay : 0; // CPA = 3, OCPM = 4
+        const convCost = c.bid_type === 3 ? costToPay : 0; // CPA = 3
         await this.redisService.set(`click:${clickId}`, JSON.stringify({
             requestId,
             campaignId: c.campaign_id,

@@ -80,7 +80,7 @@ export class FilterService implements PipelineStep {
 
         // Time logic for pacing
         const now = new Date();
-        const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        const secSinceMidnight = now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds();
         const dailyTimeProgress = secSinceMidnight / 86400; // 0.0 to 1.0
 
         for (let i = 0; i < candidates.length; i++) {

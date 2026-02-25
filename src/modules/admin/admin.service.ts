@@ -224,7 +224,7 @@ export class AdminService {
         const pacingInfo = [];
 
         const now = new Date();
-        const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        const secSinceMidnight = now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds();
         const dailyTimeProgress = secSinceMidnight / 86400;
 
         for (let i = 0; i < campaigns.length; i++) {
