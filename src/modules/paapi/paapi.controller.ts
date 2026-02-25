@@ -4,6 +4,7 @@ import { Controller, Get, Header } from '@nestjs/common';
 export class PaapiController {
     @Get('decision-logic.js')
     @Header('Content-Type', 'application/javascript')
+    @Header('Ad-Auction-Allowed', 'true')
     getDecisionLogic() {
         return `function scoreAd(adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
   return bid;
@@ -16,6 +17,7 @@ function reportResult(auctionConfig, browserSignals) {
 
     @Get('bidding-logic.js')
     @Header('Content-Type', 'application/javascript')
+    @Header('Ad-Auction-Allowed', 'true')
     getBiddingLogic() {
         return `function generateBid(interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals, browserSignals) {
   return {
