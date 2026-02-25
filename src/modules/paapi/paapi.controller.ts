@@ -34,6 +34,7 @@ function reportWin(auctionSignals, perBuyerSignals, sellerSignals, browserSignal
 
     @Get('ad-creative.html')
     @Header('Content-Type', 'text/html')
+    @Header('Supports-Loading-Mode', 'fenced-frame')
     getAdCreative() {
         return `<!DOCTYPE html>
 <html>
