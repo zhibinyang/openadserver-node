@@ -40,4 +40,32 @@ function reportWin(auctionSignals, perBuyerSignals, sellerSignals, browserSignal
   </body>
 </html>`;
     }
+
+    @Get('join.html')
+    @Header('Content-Type', 'text/html')
+    getJoinHtml() {
+        return `<!DOCTYPE html>
+<html>
+<body>
+  <script>
+    // 这里的代码运行在 ads.zhibinyang.net 域名下
+    var myGroup = {
+      owner: 'https://ads.zhibinyang.net', // 恢复为你的 AdServer 域名
+      name: 'test-sneakers',
+      biddingLogicUrl: 'https://ads.zhibinyang.net/paapi/bidding-logic.js',
+      ads: [{
+        renderUrl: 'https://ads.zhibinyang.net/paapi/ad-creative.html',
+        metadata: { type: 'sneaker', baseBid: 10 }
+      }]
+    };
+
+    if (navigator.joinAdInterestGroup) {
+      navigator.joinAdInterestGroup(myGroup, 30 * 24 * 60 * 60)
+        .then(function() { console.log("Iframe: Joined IG via ads.zhibinyang.net"); })
+        .catch(function(e) { console.error("Iframe error:", e); });
+    }
+  </script>
+</body>
+</html>`;
+    }
 }
