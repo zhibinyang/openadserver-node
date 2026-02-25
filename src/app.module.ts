@@ -7,6 +7,7 @@ import { EngineModule } from './modules/engine/engine.module';
 import { RedisModule } from './shared/redis/redis.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { PaapiModule } from './modules/paapi/paapi.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AdminModule } from './modules/admin/admin.module';
     EngineModule,
     TrackingModule,
     AdminModule,
+    PaapiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
