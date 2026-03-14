@@ -166,6 +166,28 @@ export class MockRedis {
         commands.push(() => mock.sadd(key, ...members));
         return this;
       },
+      hget(key: string, field: string) {
+        commands.push(() => mock.hget(key, field));
+        return this;
+      },
+      hset(key: string, field: string, value: string) {
+        commands.push(() => mock.hset(key, field, value));
+        return this;
+      },
+      hmget(key: string, ...fields: string[]) {
+        commands.push(async () => {
+          const results: (string | null)[] = [];
+          for (const field of fields) {
+            results.push(await mock.hget(key, field));
+          }
+          return results;
+        });
+        return this;
+      },
+      hgetall(key: string) {
+        commands.push(() => mock.hgetall(key));
+        return this;
+      },
       async exec() {
         const results = [];
         for (const cmd of commands) {
