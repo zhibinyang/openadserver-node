@@ -55,6 +55,10 @@ export class TargetingMatcher {
                 // Exclude rule: reverse match result
                 matched = !this.matchInterests(value, context);
                 break;
+            case 'interest':
+                // Old interest rule format
+                matched = this.matchInterests(value, context);
+                break;
             case 'demographics':
                 matched = this.matchDemographics(value, context);
                 break;
@@ -78,18 +82,39 @@ export class TargetingMatcher {
 
     /**
      * Match age range rule.
-     * Supported formats: "20-30" (between 20 and 30 inclusive), "18-" (18 and above), "-40" (40 and below)
+     * Supported formats: object {min: 18, max: 34} or string "20-30", "18-", "-40"
      */
-    private matchAge(ageRange: any, context: UserContext): boolean {
+    private matchAge(ageRule: any, context: UserContext): boolean {
         if (!context.age) return false; // No age info, can't match
 
         const userAge = context.age;
         if (isNaN(userAge) || userAge < 0 || userAge > 120) return false;
-        if (typeof ageRange !== 'string') return false; // Invalid age range format
+
+        // Object format: {min: 18, max: 34}
+        if (typeof ageRule === 'object' && ageRule !== null) {
+            const min = ageRule.min ?? 0;
+            const max = ageRule.max ?? 120;
+            return userAge >= min && userAge <= max;
+        }
+
+        // String format: "20-30", "18-", "-40"
+        if (typeof ageRule === 'string') {
+            if (ageRule.includes('-')) {
+                const [minStr, maxStr] = ageRule.split('-', 2);
+                const min = minStr ? parseInt(minStr, 10) : 0;
+                const max = maxStr ? parseInt(maxStr, 10) : 120;
+                return !isNaN(min) && !isNaN(max) && userAge >= min && userAge <= max;
+            }
+            // Single age value
+            const age = parseInt(ageRule, 10);
+            return !isNaN(age) && userAge === age;
+        }
+
+        return false; // Invalid age rule format
 
         // Handle different range formats
-        if (ageRange.includes('-')) {
-            const [minStr, maxStr] = ageRange.split('-', 2);
+        if (ageRule.includes('-')) {
+            const [minStr, maxStr] = ageRule.split('-', 2);
             const min = minStr ? parseInt(minStr, 10) : 0;
             const max = maxStr ? parseInt(maxStr, 10) : 120;
 
@@ -97,7 +122,7 @@ export class TargetingMatcher {
         }
 
         // Exact age match
-        const exactAge = parseInt(ageRange, 10);
+        const exactAge = parseInt(ageRule, 10);
         return !isNaN(exactAge) && userAge === exactAge;
     }
 
@@ -118,8 +143,9 @@ export class TargetingMatcher {
     /**
      * Match interest rule: user has at least one of the specified interests.
      */
-    private matchInterests(interests: any, context: UserContext): boolean {
+    private matchInterests(ruleValue: any, context: UserContext): boolean {
         if (!context.interests || context.interests.length === 0) return false;
+        const interests = ruleValue?.values || ruleValue;
         if (!Array.isArray(interests) || interests.length === 0) return false;
 
         const userInterests = context.interests.map(i => String(i).toLowerCase());
