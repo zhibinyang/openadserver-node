@@ -248,3 +248,23 @@ export const campaign_hourly_performance = pgTable('campaign_hourly_performance'
     billable_count_today: integer('billable_count_today'),
     billable_count_total: integer('billable_count_total'),
 });
+
+// --- USER PROFILES ---
+export const user_profiles = pgTable('user_profiles', {
+    id: serial('id').primaryKey(),
+    user_id: varchar('user_id', { length: 255 }).notNull().unique(),
+    
+    // Demographics
+    age: integer('age'),
+    gender: varchar('gender', { length: 20 }).default('unknown'), // 'male' / 'female' / 'other' / 'unknown'
+    
+    // Interests & Tags
+    interests: json('interests').default([]), // Array of interest codes
+    tags: json('tags').default([]), // Array of custom tags
+    
+    // Custom attributes
+    custom_attributes: json('custom_attributes').default({}), // Key-value custom attributes
+    
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});

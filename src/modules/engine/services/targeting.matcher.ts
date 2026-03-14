@@ -1,6 +1,6 @@
 
 import { Injectable } from '@nestjs/common';
-import { UserContext } from '../../../shared/types';
+import { UserContext, TargetingRuleType } from '../../../shared/types';
 import { CachedRule } from './cache.service';
 
 @Injectable()
@@ -28,11 +28,32 @@ export class TargetingMatcher {
         let matched = false;
 
         switch (rule.rule_type) {
-            case 'geo':
+            case TargetingRuleType.GEO:
                 matched = this.matchGeo(value, context);
                 break;
-            case 'device':
+            case TargetingRuleType.OS:
+                // Backward compatibility: old 'os' rule was part of device rule
+                matched = this.matchDevice({ os: value }, context);
+                break;
+            case TargetingRuleType.DEVICE:
                 matched = this.matchDevice(value, context);
+                break;
+            case TargetingRuleType.BROWSER:
+                // Backward compatibility: old 'browser' rule was part of device rule
+                matched = this.matchDevice({ browser: value }, context);
+                break;
+            case TargetingRuleType.AGE:
+                matched = this.matchAge(value, context);
+                break;
+            case TargetingRuleType.GENDER:
+                matched = this.matchGender(value, context);
+                break;
+            case TargetingRuleType.INTEREST_INCLUDE:
+                matched = this.matchInterests(value, context);
+                break;
+            case TargetingRuleType.INTEREST_EXCLUDE:
+                // Exclude rule: reverse match result
+                matched = !this.matchInterests(value, context);
                 break;
             case 'demographics':
                 matched = this.matchDemographics(value, context);
@@ -48,10 +69,61 @@ export class TargetingMatcher {
                 break;
             }
             default:
+                // Unknown rule type: pass to avoid breaking existing rules
                 return true;
         }
 
         return isInclude ? matched : !matched;
+    }
+
+    /**
+     * Match age range rule.
+     * Supported formats: "20-30" (between 20 and 30 inclusive), "18-" (18 and above), "-40" (40 and below)
+     */
+    private matchAge(ageRange: any, context: UserContext): boolean {
+        if (!context.age) return false; // No age info, can't match
+
+        const userAge = context.age;
+        if (isNaN(userAge) || userAge < 0 || userAge > 120) return false;
+        if (typeof ageRange !== 'string') return false; // Invalid age range format
+
+        // Handle different range formats
+        if (ageRange.includes('-')) {
+            const [minStr, maxStr] = ageRange.split('-', 2);
+            const min = minStr ? parseInt(minStr, 10) : 0;
+            const max = maxStr ? parseInt(maxStr, 10) : 120;
+
+            return !isNaN(min) && !isNaN(max) && userAge >= min && userAge <= max;
+        }
+
+        // Exact age match
+        const exactAge = parseInt(ageRange, 10);
+        return !isNaN(exactAge) && userAge === exactAge;
+    }
+
+    /**
+     * Match gender rule.
+     * Supported values: "male", "female", "other"
+     */
+    private matchGender(gender: any, context: UserContext): boolean {
+        if (!context.gender) return false; // No gender info, can't match
+        if (!gender) return false;
+
+        const userGender = context.gender.toLowerCase();
+        const allowedGenders = Array.isArray(gender) ? gender : [String(gender)];
+
+        return allowedGenders.some(g => g.toLowerCase() === userGender);
+    }
+
+    /**
+     * Match interest rule: user has at least one of the specified interests.
+     */
+    private matchInterests(interests: any, context: UserContext): boolean {
+        if (!context.interests || context.interests.length === 0) return false;
+        if (!Array.isArray(interests) || interests.length === 0) return false;
+
+        const userInterests = context.interests.map(i => String(i).toLowerCase());
+        return interests.some(interest => userInterests.includes(String(interest).toLowerCase()));
     }
 
     private matchGeo(value: any, context: UserContext): boolean {

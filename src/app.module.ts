@@ -8,6 +8,7 @@ import { RedisModule } from './shared/redis/redis.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { PaapiModule } from './modules/paapi/paapi.module';
+import { UserProfileModule } from './modules/user-profile/user-profile.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PaapiModule } from './modules/paapi/paapi.module';
     TrackingModule,
     AdminModule,
     PaapiModule,
+    UserProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

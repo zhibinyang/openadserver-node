@@ -78,6 +78,13 @@
       "when": 1771718831005,
       "tag": "0010_clear_harry_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1773447193195,
+      "tag": "0011_giant_black_widow",
+      "breakpoints": true
     }
   ]
 }
