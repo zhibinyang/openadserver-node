@@ -17,6 +17,7 @@ import { RerankService } from './pipeline/5-rerank.service';
 import { AdEngine } from './ad-engine.service';
 import { GeoIpService } from './services/geoip.service';
 import { UserProfileService } from './services/user-profile.service';
+import { SegmentService } from './services/segment.service';
 import { EngineController } from './engine.controller';
 
 @Module({
@@ -38,6 +39,7 @@ import { EngineController } from './engine.controller';
         GeoIpService,
         CalibrationService,
         UserProfileService,
+        SegmentService,
         // Pipeline Steps
         RetrievalService,
         FilterService,

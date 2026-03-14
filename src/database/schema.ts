@@ -10,6 +10,7 @@ import {
     boolean,
     json,
     index,
+    primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { Status, BidType, PacingType, CreativeType, EventType } from '../shared/types';
@@ -268,3 +269,27 @@ export const user_profiles = pgTable('user_profiles', {
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// --- SEGMENTS (人群包) ---
+export const segments = pgTable('segments', {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    type: varchar('type', { length: 50 }).notNull().default('custom'), // custom / behavior / lookalike
+    status: integer('status').default(1), // 1=active, 0=inactive
+    user_count: integer('user_count').default(0),
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// --- SEGMENT USERS (人群包用户关联) ---
+export const segment_users = pgTable('segment_users', {
+    segment_id: integer('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+    user_id: varchar('user_id', { length: 255 }).notNull(),
+    added_at: timestamp('added_at').defaultNow().notNull(),
+    expires_at: timestamp('expires_at'),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.segment_id, table.user_id] }),
+    userIdIdx: index('segment_users_user_id_idx').on(table.user_id),
+    expiresAtIdx: index('segment_users_expires_at_idx').on(table.expires_at),
+}));

@@ -36,7 +36,7 @@ export class RetrievalService implements PipelineStep {
 
             // 2. Check Targeting Rules
             const rules = this.cacheService.getRulesForCampaign(campaign.id);
-            if (!this.targetingMatcher.match(rules, context)) {
+            if (!await this.targetingMatcher.match(rules, context)) {
                 continue;
             }
 

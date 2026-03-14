@@ -1,27 +1,30 @@
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { UserContext, TargetingRuleType } from '../../../shared/types';
 import { CachedRule } from './cache.service';
+import { SegmentService } from './segment.service';
 
 @Injectable()
 export class TargetingMatcher {
+    constructor(@Optional() private segmentService?: SegmentService) { }
+
     /**
      * Check if user context matches a list of rules.
      * Logic: Rules are ANDed together (must pass all).
      * Inside a rule, values are usually ORed (e.g. "US" or "CA").
      */
-    match(rules: CachedRule[], context: UserContext): boolean {
+    async match(rules: CachedRule[], context: UserContext): Promise<boolean> {
         if (!rules || rules.length === 0) return true;
 
         for (const rule of rules) {
-            if (!this.matchSingleRule(rule, context)) {
+            if (!await this.matchSingleRule(rule, context)) {
                 return false;
             }
         }
         return true;
     }
 
-    private matchSingleRule(rule: CachedRule, context: UserContext): boolean {
+    private async matchSingleRule(rule: CachedRule, context: UserContext): Promise<boolean> {
         const value = rule.rule_value as any; // JSON type
         const isInclude = rule.is_include ?? true;
 
@@ -58,6 +61,12 @@ export class TargetingMatcher {
             case 'interest':
                 // Old interest rule format
                 matched = this.matchInterests(value, context);
+                break;
+            case TargetingRuleType.SEGMENT_INCLUDE:
+                matched = this.segmentService ? await this.matchSegments(value, context) : false;
+                break;
+            case TargetingRuleType.SEGMENT_EXCLUDE:
+                matched = this.segmentService ? !await this.matchSegments(value, context) : true;
                 break;
             case 'demographics':
                 matched = this.matchDemographics(value, context);
@@ -111,19 +120,6 @@ export class TargetingMatcher {
         }
 
         return false; // Invalid age rule format
-
-        // Handle different range formats
-        if (ageRule.includes('-')) {
-            const [minStr, maxStr] = ageRule.split('-', 2);
-            const min = minStr ? parseInt(minStr, 10) : 0;
-            const max = maxStr ? parseInt(maxStr, 10) : 120;
-
-            return !isNaN(min) && !isNaN(max) && userAge >= min && userAge <= max;
-        }
-
-        // Exact age match
-        const exactAge = parseInt(ageRule, 10);
-        return !isNaN(exactAge) && userAge === exactAge;
     }
 
     /**
@@ -218,5 +214,20 @@ export class TargetingMatcher {
             }
         }
         return true;
+    }
+
+    /**
+     * Match segment rule: user belongs to at least one of the specified segments.
+     */
+    private async matchSegments(segmentIds: any, context: UserContext): Promise<boolean> {
+        if (!context.user_id) return false; // No user id, can't match
+        if (!segmentIds) return false;
+        if (!this.segmentService) return false; // Segment service not available
+
+        const targetSegments = Array.isArray(segmentIds) ? segmentIds : [segmentIds];
+        if (targetSegments.length === 0) return false;
+
+        const userSegments = await this.segmentService.getUserSegmentIds(context.user_id);
+        return targetSegments.some(segId => userSegments.includes(Number(segId)));
     }
 }
