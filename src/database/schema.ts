@@ -293,3 +293,88 @@ export const segment_users = pgTable('segment_users', {
     userIdIdx: index('segment_users_user_id_idx').on(table.user_id),
     expiresAtIdx: index('segment_users_expires_at_idx').on(table.expires_at),
 }));
+
+// --- BID LOGS (竞价日志) ---
+export const bid_logs = pgTable('bid_logs', {
+    id: serial('id').primaryKey(),
+    request_id: varchar('request_id', { length: 64 }).notNull(),
+    bid_id: varchar('bid_id', { length: 64 }),
+    imp_id: varchar('imp_id', { length: 64 }),
+
+    ssp_id: varchar('ssp_id', { length: 50 }).notNull(), // SSP adapter ID
+    campaign_id: integer('campaign_id').references(() => campaigns.id),
+    creative_id: integer('creative_id').references(() => creatives.id),
+
+    // Bid details
+    bid_price: numeric('bid_price', { precision: 12, scale: 6 }).default('0'), // Bid amount
+    win_price: numeric('win_price', { precision: 12, scale: 6 }), // Actual win price (if won)
+    currency: varchar('currency', { length: 3 }).default('USD'),
+
+    // Result: 'bid', 'win', 'loss', 'timeout', 'error'
+    result: varchar('result', { length: 20 }).notNull(),
+
+    // Timing
+    response_time_ms: integer('response_time_ms'), // Time to process bid
+
+    // Error info
+    error_message: text('error_message'),
+
+    // Context
+    user_id: varchar('user_id', { length: 255 }),
+    ip: varchar('ip', { length: 45 }),
+    country: varchar('country', { length: 2 }),
+    device: varchar('device', { length: 255 }),
+    browser: varchar('browser', { length: 255 }),
+    os: varchar('os', { length: 50 }),
+
+    // Slot info
+    slot_id: varchar('slot_id', { length: 255 }),
+    slot_type: integer('slot_type'),
+    slot_width: integer('slot_width'),
+    slot_height: integer('slot_height'),
+
+    // Additional data
+    ext: json('ext'), // Extra metadata
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    requestIdIdx: index('bid_logs_request_id_idx').on(table.request_id),
+    sspIdIdx: index('bid_logs_ssp_id_idx').on(table.ssp_id),
+    campaignIdIdx: index('bid_logs_campaign_id_idx').on(table.campaign_id),
+    resultIdx: index('bid_logs_result_idx').on(table.result),
+    createdAtIdx: index('bid_logs_created_at_idx').on(table.created_at),
+}));
+
+// --- SSP DAILY STATS (SSP每日统计) ---
+export const ssp_daily_stats = pgTable('ssp_daily_stats', {
+    id: serial('id').primaryKey(),
+    ssp_id: varchar('ssp_id', { length: 50 }).notNull(),
+    stat_date: timestamp('stat_date').notNull(),
+
+    // Request stats
+    total_requests: integer('total_requests').default(0),
+    valid_requests: integer('valid_requests').default(0),
+    bid_responses: integer('bid_responses').default(0),
+    no_bid_responses: integer('no_bid_responses').default(0),
+
+    // Win/Loss
+    wins: integer('wins').default(0),
+    losses: integer('losses').default(0),
+    timeouts: integer('timeouts').default(0),
+    errors: integer('errors').default(0),
+
+    // Financial
+    total_bid_value: numeric('total_bid_value', { precision: 16, scale: 6 }).default('0'),
+    total_win_value: numeric('total_win_value', { precision: 16, scale: 6 }).default('0'),
+
+    // Performance
+    avg_response_time_ms: numeric('avg_response_time_ms', { precision: 10, scale: 2 }),
+    avg_bid_price: numeric('avg_bid_price', { precision: 12, scale: 6 }),
+    win_rate: numeric('win_rate', { precision: 6, scale: 4 }).default('0'),
+    bid_rate: numeric('bid_rate', { precision: 6, scale: 4 }).default('0'),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    sspDateIdx: index('ssp_daily_stats_ssp_date_idx').on(table.ssp_id, table.stat_date),
+}));

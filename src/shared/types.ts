@@ -56,6 +56,18 @@ export enum EventType {
 }
 
 /**
+ * Bid result enum.
+ */
+export enum BidResult {
+    BID = 'bid',       // Bid submitted
+    WIN = 'win',       // Won the auction
+    LOSS = 'loss',     // Lost the auction
+    NO_BID = 'no_bid', // Decided not to bid
+    TIMEOUT = 'timeout', // Response timeout
+    ERROR = 'error',   // Error during bidding
+}
+
+/**
  * Targeting rule type enum.
  */
 export enum TargetingRuleType {

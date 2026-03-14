@@ -11,6 +11,7 @@ import { PaapiModule } from './modules/paapi/paapi.module';
 import { UserProfileModule } from './modules/user-profile/user-profile.module';
 import { RtbModule } from './modules/rtb/rtb.module';
 import { SspModule } from './modules/ssp/ssp.module';
+import { BidLogModule } from './modules/bid-log/bid-log.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { SspModule } from './modules/ssp/ssp.module';
     UserProfileModule,
     RtbModule,
     SspModule,
+    BidLogModule,
   ],
   controllers: [AppController],
   providers: [AppService],

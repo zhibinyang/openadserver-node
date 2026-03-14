@@ -85,6 +85,13 @@
       "when": 1773447193195,
       "tag": "0011_giant_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1773524377428,
+      "tag": "0012_cynical_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }
