@@ -9,6 +9,7 @@ import { TrackingModule } from './modules/tracking/tracking.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { PaapiModule } from './modules/paapi/paapi.module';
 import { UserProfileModule } from './modules/user-profile/user-profile.module';
+import { RtbModule } from './modules/rtb/rtb.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UserProfileModule } from './modules/user-profile/user-profile.module';
     AdminModule,
     PaapiModule,
     UserProfileModule,
+    RtbModule,
   ],
   controllers: [AppController],
   providers: [AppService],
