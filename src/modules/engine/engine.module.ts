@@ -50,6 +50,6 @@ import { EngineController } from './engine.controller';
         AdEngine,
     ],
     controllers: [EngineController],
-    exports: [CacheService, AdEngine, CalibrationService],
+    exports: [CacheService, AdEngine, CalibrationService, SegmentService],
 })
 export class EngineModule { }
