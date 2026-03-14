@@ -10,6 +10,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { PaapiModule } from './modules/paapi/paapi.module';
 import { UserProfileModule } from './modules/user-profile/user-profile.module';
 import { RtbModule } from './modules/rtb/rtb.module';
+import { SspModule } from './modules/ssp/ssp.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RtbModule } from './modules/rtb/rtb.module';
     PaapiModule,
     UserProfileModule,
     RtbModule,
+    SspModule,
   ],
   controllers: [AppController],
   providers: [AppService],
