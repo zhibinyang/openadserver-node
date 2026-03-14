@@ -56,6 +56,22 @@ export enum EventType {
 }
 
 /**
+ * Targeting rule type enum.
+ */
+export enum TargetingRuleType {
+    GEO = 'geo',
+    OS = 'os',
+    DEVICE = 'device',
+    BROWSER = 'browser',
+    AGE = 'age',
+    GENDER = 'gender',
+    INTEREST_INCLUDE = 'interest_include',
+    INTEREST_EXCLUDE = 'interest_exclude',
+    SEGMENT_INCLUDE = 'segment_include',
+    SEGMENT_EXCLUDE = 'segment_exclude',
+}
+
+/**
  * Ad candidate for ranking.
  * Internal structure passed through the pipeline.
  */
