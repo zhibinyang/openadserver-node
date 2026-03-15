@@ -4,6 +4,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../database/schema';
 import { eq } from 'drizzle-orm';
+import { UserIdentityService } from './user-identity.service';
 
 /**
  * User profile interface
@@ -18,6 +19,14 @@ export interface UserProfile {
     updated_at: Date;
 }
 
+/**
+ * Identity query options
+ */
+export interface IdentityQuery {
+    identity_type: string;
+    identity_value: string;
+}
+
 @Injectable()
 export class UserProfileService {
     private readonly logger = new Logger(UserProfileService.name);
@@ -26,8 +35,64 @@ export class UserProfileService {
 
     constructor(
         private readonly redisService: RedisService,
+        private readonly userIdentityService: UserIdentityService,
         @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
     ) { }
+
+    /**
+     * 通过身份标识获取用户画像
+     * 自动解析身份并返回画像
+     *
+     * @param identity 身份类型和值
+     * @returns 用户画像
+     */
+    async getProfileByIdentity(identity: IdentityQuery): Promise<Partial<UserProfile> | null> {
+        const resolveResult = await this.userIdentityService.resolveUserId(
+            identity.identity_type,
+            identity.identity_value,
+        );
+        return this.getProfile(resolveResult.user_id);
+    }
+
+    /**
+     * 通过身份标识更新用户画像
+     * 如果用户不存在会自动创建
+     *
+     * @param identity 身份类型和值
+     * @param profile 画像数据
+     */
+    async updateProfileByIdentity(
+        identity: IdentityQuery,
+        profile: Partial<Omit<UserProfile, 'user_id' | 'updated_at'>>,
+    ): Promise<{ user_id: string; is_new: boolean }> {
+        const resolveResult = await this.userIdentityService.resolveUserId(
+            identity.identity_type,
+            identity.identity_value,
+        );
+        await this.updateProfile(resolveResult.user_id, profile);
+        return { user_id: resolveResult.user_id, is_new: resolveResult.is_new };
+    }
+
+    /**
+     * 为用户添加身份映射
+     * 用于将多个ID关联到同一个用户
+     *
+     * @param userId 统一用户ID
+     * @param identity 身份类型和值
+     * @param source 来源标识
+     */
+    async linkIdentity(
+        userId: string,
+        identity: IdentityQuery,
+        source?: string,
+    ): Promise<void> {
+        await this.userIdentityService.addIdentity(
+            userId,
+            identity.identity_type,
+            identity.identity_value,
+            source,
+        );
+    }
 
     /**
      * Get user profile by user_id

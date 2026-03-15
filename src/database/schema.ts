@@ -250,6 +250,33 @@ export const campaign_hourly_performance = pgTable('campaign_hourly_performance'
     billable_count_total: integer('billable_count_total'),
 });
 
+// --- USER IDENTITIES (用户多ID映射) ---
+export const IdentityType = {
+    DEVICE_ID: 'device_id',       // 设备ID (cookie, web storage)
+    IDFA: 'idfa',                 // iOS Identifier for Advertisers
+    GAID: 'gaid',                 // Google Advertising ID
+    OAID: 'oaid',                 // Android OAID (中国)
+    EMAIL_HASH: 'email_hash',     // Email SHA256 hash
+    PHONE_HASH: 'phone_hash',     // Phone SHA256 hash
+    CUSTOM: 'custom',             // 自定义ID类型
+} as const;
+
+export const user_identities = pgTable('user_identities', {
+    user_id: varchar('user_id', { length: 255 }).notNull(),
+    identity_type: varchar('identity_type', { length: 50 }).notNull(),
+    identity_value: varchar('identity_value', { length: 255 }).notNull(),
+    source: varchar('source', { length: 100 }), // 来源标识 (如 'pixel', 'sdk', 'upload')
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    // 联合主键: 同一类型的ID值唯一
+    pk: primaryKey({ columns: [table.identity_type, table.identity_value] }),
+    // 按user_id查询索引
+    userIdIdx: index('user_identities_user_id_idx').on(table.user_id),
+    // 按类型查询索引
+    typeIdx: index('user_identities_type_idx').on(table.identity_type),
+}));
+
 // --- USER PROFILES ---
 export const user_profiles = pgTable('user_profiles', {
     id: serial('id').primaryKey(),

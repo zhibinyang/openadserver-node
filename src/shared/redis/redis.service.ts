@@ -110,7 +110,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     async hexists(key: string, field: string): Promise<boolean> {
-        return this.redis.hexists(key, field);
+        const result = await this.redis.hexists(key, field);
+        return result === 1;
     }
 
     // --- Set Operations ---
@@ -130,7 +131,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     async sismember(key: string, member: string): Promise<boolean> {
-        return this.redis.sismember(key, member);
+        const result = await this.redis.sismember(key, member);
+        return result === 1;
     }
 
     async smembers(key: string): Promise<string[]> {
