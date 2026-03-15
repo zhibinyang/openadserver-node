@@ -76,6 +76,30 @@
           value="report-campaigns"
         />
       </v-list-group>
+
+      <v-list-group value="admin" v-if="authStore.isAdmin">
+        <template #activator="{ props }">
+          <v-list-item
+            v-bind="props"
+            prepend-icon="mdi-shield-account"
+            title="Admin"
+          />
+        </template>
+
+        <v-list-item
+          to="/users"
+          prepend-icon="mdi-account-multiple"
+          title="Users"
+          value="users"
+        />
+      </v-list-group>
+
+      <v-list-item
+        to="/api-keys"
+        prepend-icon="mdi-key"
+        title="API Keys"
+        value="api-keys"
+      />
     </v-list>
 
     <template #append>
@@ -91,8 +115,12 @@
 </template>
 
 <script setup>
+import { useAuthStore } from '@/stores/auth'
+
 defineProps({
   rail: Boolean
 })
 defineEmits(['update:rail'])
+
+const authStore = useAuthStore()
 </script>

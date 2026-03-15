@@ -10,19 +10,30 @@
       <template #activator="{ props }">
         <v-btn v-bind="props" variant="text" class="ml-2">
           <v-icon start>mdi-account-circle</v-icon>
-          Admin
+          {{ authStore.username || 'User' }}
           <v-icon end>mdi-chevron-down</v-icon>
         </v-btn>
       </template>
       <v-list>
-        <v-list-item prepend-icon="mdi-cog" title="Settings" />
+        <v-list-item prepend-icon="mdi-account" title="Profile" to="/profile" />
+        <v-list-item prepend-icon="mdi-key" title="API Keys" to="/api-keys" />
         <v-divider />
-        <v-list-item prepend-icon="mdi-logout" title="Logout" />
+        <v-list-item prepend-icon="mdi-logout" title="Logout" @click="handleLogout" />
       </v-list>
     </v-menu>
   </v-app-bar>
 </template>
 
 <script setup>
-defineEmits(['toggle'])
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const emit = defineEmits(['toggle'])
+const router = useRouter()
+const authStore = useAuthStore()
+
+function handleLogout() {
+  authStore.logout()
+  router.push('/login')
+}
 </script>
