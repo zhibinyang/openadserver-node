@@ -6,14 +6,12 @@ import { DatabaseModule } from './database/database.module';
 import { EngineModule } from './modules/engine/engine.module';
 import { RedisModule } from './shared/redis/redis.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
-import { AdminModule } from './modules/admin/admin.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { PaapiModule } from './modules/paapi/paapi.module';
 import { UserProfileModule } from './modules/user-profile/user-profile.module';
 import { RtbModule } from './modules/rtb/rtb.module';
 import { SspModule } from './modules/ssp/ssp.module';
 import { BidLogModule } from './modules/bid-log/bid-log.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { ApiKeyModule } from './modules/api-key/api-key.module';
 
 @Module({
   imports: [
@@ -22,11 +20,9 @@ import { ApiKeyModule } from './modules/api-key/api-key.module';
     }),
     DatabaseModule,
     RedisModule, // Global
-    AuthModule, // Global - must be before modules that use it
-    ApiKeyModule,
+    AnalyticsModule,
     EngineModule,
     TrackingModule,
-    AdminModule,
     PaapiModule,
     UserProfileModule,
     RtbModule,

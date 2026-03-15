@@ -4,7 +4,7 @@ import { BigQueryWriteClient } from '@google-cloud/bigquery-storage';
 import * as protobuf from 'protobufjs';
 // Required for toDescriptor
 require('protobufjs/ext/descriptor');
-import { AdCandidate, UserContext, EventType } from '../../shared/types';
+import { EventType } from '../../shared/types';
 import { DRIZZLE } from '../../database/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/schema';
@@ -148,18 +148,6 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async writeToPostgres(event: any) {
-        // Map event to Postgres schema
-        // Note: event_time is in micros for BQ, but Postgres expects Date object or ISO string?
-        // Let's check how event_time is passed. 
-        // In previous changes, we converted to micros in `writeToBigQuery`.
-        // So the input `event` here likely has `event_time` as ms number (from Date.now()).
-
-        // Wait, let's check usage in EngineController/TrackingService.
-        // EngineController: event_time: Date.now()
-        // TrackingService: event_time: eventTime.getTime() (ms)
-
-        // So input is ms.
-
         await this.db.insert(schema.ad_events).values({
             request_id: event.request_id,
             click_id: event.click_id || null,
