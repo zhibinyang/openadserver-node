@@ -1,5 +1,5 @@
 
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import {
     CreateAdvertiserDto, UpdateAdvertiserDto,
@@ -7,8 +7,11 @@ import {
     CreateCreativeDto, UpdateCreativeDto,
     CreateTargetingRuleDto, UpdateTargetingRuleDto
 } from './dto/admin.dto';
+import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 
 @Controller('api/v1')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin', 'viewer')
 export class AdminController {
     constructor(private readonly adminService: AdminService) { }
 
@@ -19,16 +22,19 @@ export class AdminController {
     }
 
     @Post('advertisers')
+    @Roles('admin')
     createAdvertiser(@Body() data: CreateAdvertiserDto) {
         return this.adminService.createAdvertiser(data);
     }
 
     @Put('advertisers/:id')
+    @Roles('admin')
     updateAdvertiser(@Param('id') id: string, @Body() data: UpdateAdvertiserDto) {
         return this.adminService.updateAdvertiser(Number(id), data);
     }
 
     @Delete('advertisers/:id')
+    @Roles('admin')
     deleteAdvertiser(@Param('id') id: string) {
         return this.adminService.deleteAdvertiser(Number(id));
     }
@@ -40,16 +46,19 @@ export class AdminController {
     }
 
     @Post('campaigns')
+    @Roles('admin')
     createCampaign(@Body() data: CreateCampaignDto) {
         return this.adminService.createCampaign(data);
     }
 
     @Put('campaigns/:id')
+    @Roles('admin')
     updateCampaign(@Param('id') id: string, @Body() data: UpdateCampaignDto) {
         return this.adminService.updateCampaign(Number(id), data);
     }
 
     @Delete('campaigns/:id')
+    @Roles('admin')
     deleteCampaign(@Param('id') id: string) {
         return this.adminService.deleteCampaign(Number(id));
     }
@@ -61,16 +70,19 @@ export class AdminController {
     }
 
     @Post('creatives')
+    @Roles('admin')
     createCreative(@Body() data: CreateCreativeDto) {
         return this.adminService.createCreative(data);
     }
 
     @Put('creatives/:id')
+    @Roles('admin')
     updateCreative(@Param('id') id: string, @Body() data: UpdateCreativeDto) {
         return this.adminService.updateCreative(Number(id), data);
     }
 
     @Delete('creatives/:id')
+    @Roles('admin')
     deleteCreative(@Param('id') id: string) {
         return this.adminService.deleteCreative(Number(id));
     }
@@ -82,16 +94,19 @@ export class AdminController {
     }
 
     @Post('targeting')
+    @Roles('admin')
     createTargetingRule(@Body() data: CreateTargetingRuleDto) {
         return this.adminService.createTargetingRule(data);
     }
 
     @Put('targeting/:id')
+    @Roles('admin')
     updateTargetingRule(@Param('id') id: string, @Body() data: UpdateTargetingRuleDto) {
         return this.adminService.updateTargetingRule(Number(id), data);
     }
 
     @Delete('targeting/:id')
+    @Roles('admin')
     deleteTargetingRule(@Param('id') id: string) {
         return this.adminService.deleteTargetingRule(Number(id));
     }

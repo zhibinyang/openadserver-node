@@ -12,6 +12,7 @@ import { UserProfileModule } from './modules/user-profile/user-profile.module';
 import { RtbModule } from './modules/rtb/rtb.module';
 import { SspModule } from './modules/ssp/ssp.module';
 import { BidLogModule } from './modules/bid-log/bid-log.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { BidLogModule } from './modules/bid-log/bid-log.module';
     }),
     DatabaseModule,
     RedisModule, // Global
+    AuthModule, // Global - must be before modules that use it
     EngineModule,
     TrackingModule,
     AdminModule,
