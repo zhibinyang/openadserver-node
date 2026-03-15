@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main",
     "init:db": "drizzle-kit push --force && ts-node scripts/init-test-data.ts",
+    "seed:admin": "ts-node scripts/seed-admin.ts",
     "seed:db": "node dist/src/database/seed.js",
     "migration:run": "node dist/src/database/migrate.js",
     "debug:db": "ts-node scripts/debug-db.ts",
