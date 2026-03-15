@@ -378,3 +378,68 @@ export const ssp_daily_stats = pgTable('ssp_daily_stats', {
 }, (table) => ({
     sspDateIdx: index('ssp_daily_stats_ssp_date_idx').on(table.ssp_id, table.stat_date),
 }));
+
+// --- USERS (管理员用户) ---
+export const UserRole = {
+    ADMIN: 'admin',
+    VIEWER: 'viewer',
+} as const;
+
+export const UserStatus = {
+    ACTIVE: 1,
+    INACTIVE: 0,
+} as const;
+
+export const users = pgTable('users', {
+    id: serial('id').primaryKey(),
+    username: varchar('username', { length: 50 }).notNull().unique(),
+    email: varchar('email', { length: 255 }).notNull().unique(),
+    password_hash: varchar('password_hash', { length: 255 }).notNull(),
+    role: varchar('role', { length: 20 }).notNull().default('viewer'),
+    status: integer('status').default(UserStatus.ACTIVE),
+    last_login_at: timestamp('last_login_at'),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    usernameIdx: index('users_username_idx').on(table.username),
+    emailIdx: index('users_email_idx').on(table.email),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+    api_keys: many(api_keys),
+}));
+
+// --- API KEYS (API密钥) ---
+export const ApiKeyStatus = {
+    ACTIVE: 1,
+    REVOKED: 0,
+} as const;
+
+export const api_keys = pgTable('api_keys', {
+    id: serial('id').primaryKey(),
+    user_id: integer('user_id')
+        .notNull()
+        .references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 100 }).notNull(),
+    key_hash: varchar('key_hash', { length: 255 }).notNull().unique(),
+    key_prefix: varchar('key_prefix', { length: 12 }).notNull(), // First 12 chars for identification
+    permissions: json('permissions').default([]), // Array of permission strings
+    last_used_at: timestamp('last_used_at'),
+    expires_at: timestamp('expires_at'),
+    status: integer('status').default(ApiKeyStatus.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdIdx: index('api_keys_user_id_idx').on(table.user_id),
+    keyHashIdx: index('api_keys_key_hash_idx').on(table.key_hash),
+    keyPrefixIdx: index('api_keys_key_prefix_idx').on(table.key_prefix),
+}));
+
+export const apiKeysRelations = relations(api_keys, ({ one }) => ({
+    user: one(users, {
+        fields: [api_keys.user_id],
+        references: [users.id],
+    }),
+}));
