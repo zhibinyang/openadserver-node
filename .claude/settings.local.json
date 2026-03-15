@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(npm run:*)",
+      "Bash(sleep:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(psql:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(yes:*)",
+      "Bash(node:*)",
+      "Bash(docker:*)",
+      "Bash(psql:*)",
+      "Bash(source:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}

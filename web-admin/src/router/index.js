@@ -46,6 +46,11 @@ const routes = [
         component: () => import('@/views/targeting/List.vue'),
       },
       {
+        path: 'targeting/:id',
+        name: 'targeting-detail',
+        component: () => import('@/views/targeting/Detail.vue'),
+      },
+      {
         path: 'reports/overview',
         name: 'reports-overview',
         component: () => import('@/views/reports/Overview.vue'),
