@@ -438,13 +438,23 @@ export class RedisUserService {
     async getUserDataByIdentity(
         idType: string,
         idValue: string,
+        createIfNotExists: boolean = true,
     ): Promise<{
         internal_uid: string;
         is_new: boolean;
         profile: UserProfile | null;
         segmentIds: number[];
     }> {
-        const resolveResult = await this.resolveIdentity(idType, idValue);
+        const resolveResult = await this.resolveIdentity(idType, idValue, createIfNotExists);
+
+        if (!resolveResult.internal_uid) {
+            return {
+                ...resolveResult,
+                profile: null,
+                segmentIds: [],
+            };
+        }
+
         const userData = await this.getUserData(resolveResult.internal_uid);
 
         return {

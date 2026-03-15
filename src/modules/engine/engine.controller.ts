@@ -11,6 +11,7 @@ import { UAParser } from 'ua-parser-js';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { CacheService } from './services/cache.service';
 import { RedisService } from '../../shared/redis/redis.service';
+import { RedisUserService } from './services/redis-user.service';
 
 @Controller('ad')
 export class EngineController {
@@ -23,6 +24,7 @@ export class EngineController {
         private readonly analyticsService: AnalyticsService,
         private readonly cacheService: CacheService,
         private readonly redisService: RedisService,
+        private readonly redisUserService: RedisUserService,
     ) { }
 
     @Post('get')
@@ -31,7 +33,7 @@ export class EngineController {
             throw new BadRequestException('slot_type is required for /ad/get');
         }
         const requestId = randomUUID();
-        const context = this.buildContext(body, req);
+        const context = await this.buildContext(body, req);
         const candidates = await this.adEngine.recommend(context, body.slot_id);
 
         // Log winning campaign's current budget and spend asynchronously
@@ -94,7 +96,7 @@ export class EngineController {
         @Res() res: FastifyReply
     ): Promise<void> {
         const requestId = randomUUID();
-        const context = this.buildContext(query, req);
+        const context = await this.buildContext(query, req);
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, query.slot_id);
 
@@ -149,7 +151,7 @@ export class EngineController {
         @Res() res: FastifyReply
     ): Promise<void> {
         const requestId = randomUUID();
-        const context = this.buildContext(body, req);
+        const context = await this.buildContext(body, req);
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, body.slot_id);
 
@@ -195,7 +197,7 @@ export class EngineController {
         res.send(xml);
     }
 
-    private buildContext(dto: AdRequestDto, req: FastifyRequest): UserContext {
+    private async buildContext(dto: AdRequestDto, req: FastifyRequest): Promise<UserContext> {
         // 1. IP Detection Logic
         // Priority: DTO > X-Forwarded-For (Last) > Req IP
         let ip = dto.ip;
@@ -254,7 +256,67 @@ export class EngineController {
             num_ads: dto.num_ads || 1,
         };
 
-        // 4. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided
+        // 4. Redis-based identity resolution and user data retrieval
+        if (dto.identity_type && dto.identity_value) {
+            try {
+                const userData = await this.redisUserService.getUserDataByIdentity(
+                    dto.identity_type,
+                    dto.identity_value,
+                    true, // Create if not exists
+                );
+
+                if (userData) {
+                    context.identity_type = dto.identity_type;
+                    context.identity_value = dto.identity_value;
+                    context.internal_uid = userData.internal_uid;
+
+                    // Populate profile data if available
+                    if (userData.profile) {
+                        // Use profile data as fallback if not provided in DTO
+                        if (!context.user_id) {
+                            context.user_id = userData.internal_uid;
+                        }
+                        if (!context.age && userData.profile.age) {
+                            context.age = userData.profile.age;
+                        }
+                        if (!context.gender && userData.profile.gender) {
+                            context.gender = userData.profile.gender;
+                        }
+                        if (!context.interests?.length && userData.profile.interests?.length) {
+                            context.interests = userData.profile.interests;
+                        }
+                    }
+
+                    // Populate segment IDs for targeting
+                    if (userData.segmentIds?.length) {
+                        context.segment_ids = userData.segmentIds;
+                    }
+                }
+            } catch (e) {
+                this.logger.warn(`Failed to resolve identity: ${e}`);
+            }
+        } else if (dto.user_id) {
+            // Legacy: Try to resolve by user_id as device_id for backward compatibility
+            try {
+                const userData = await this.redisUserService.getUserDataByIdentity(
+                    'device_id',
+                    dto.user_id,
+                    true,
+                );
+
+                if (userData) {
+                    context.internal_uid = userData.internal_uid;
+
+                    if (userData.segmentIds?.length) {
+                        context.segment_ids = userData.segmentIds;
+                    }
+                }
+            } catch (e) {
+                this.logger.warn(`Failed to resolve legacy user_id: ${e}`);
+            }
+        }
+
+        // 5. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided
         if (context.os === 'unknown' || !context.device || !context.browser) {
             try {
                 // @ts-ignore

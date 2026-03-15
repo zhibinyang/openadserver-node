@@ -133,6 +133,11 @@ export interface UserContext {
     user_id?: string;
     user_hash?: number; // Hash for bucketing
 
+    // Identity (for Redis-based user resolution)
+    identity_type?: string;  // device_id, idfa, gaid, oaid, email_hash, phone_hash, custom
+    identity_value?: string; // The actual ID value
+    internal_uid?: string;   // Internal unified UID from Redis
+
     // Device
     os: string;
     os_version?: string;
@@ -169,4 +174,7 @@ export interface UserContext {
     interests?: string[];
     app_categories?: string[];
     custom_features?: Record<string, any>;
+
+    // Segment IDs (populated by RedisUserService)
+    segment_ids?: number[];
 }
