@@ -24,6 +24,7 @@ export const advertisers = pgTable('advertisers', {
     // Numeric types in Postgres return as string in JS, use parseFloat when reading if needed
     balance: numeric('balance', { precision: 12, scale: 4 }).default('0'),
     daily_budget: numeric('daily_budget', { precision: 12, scale: 4 }).default('0'),
+    brand_weight: numeric('brand_weight', { precision: 6, scale: 4 }).default('1.0'),
     status: integer('status').default(Status.ACTIVE),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
@@ -139,6 +140,46 @@ export const targetingRulesRelations = relations(targeting_rules, ({ one }) => (
     campaign: one(campaigns, {
         fields: [targeting_rules.campaign_id],
         references: [campaigns.id],
+    }),
+}));
+
+// --- GEO KNOWLEDGE ---
+export const geo_knowledge = pgTable('geo_knowledge', {
+    id: serial('id').primaryKey(),
+    advertiser_id: integer('advertiser_id')
+        .notNull()
+        .references(() => advertisers.id),
+    campaign_id: integer('campaign_id')
+        .references(() => campaigns.id),
+    creative_id: integer('creative_id')
+        .references(() => creatives.id),
+    title: varchar('title', { length: 255 }).notNull(),
+    content: text('content').notNull(),
+    source_url: varchar('source_url', { length: 1024 }),
+    embedding_status: varchar('embedding_status', { length: 20 }).default('pending'),
+    milvus_pk: varchar('milvus_pk', { length: 64 }),
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    advertiserIdx: index('geo_knowledge_advertiser_id_idx').on(table.advertiser_id),
+    campaignIdx: index('geo_knowledge_campaign_id_idx').on(table.campaign_id),
+    statusIdx: index('geo_knowledge_status_idx').on(table.status),
+}));
+
+export const geoKnowledgeRelations = relations(geo_knowledge, ({ one }) => ({
+    advertiser: one(advertisers, {
+        fields: [geo_knowledge.advertiser_id],
+        references: [advertisers.id],
+    }),
+    campaign: one(campaigns, {
+        fields: [geo_knowledge.campaign_id],
+        references: [campaigns.id],
+    }),
+    creative: one(creatives, {
+        fields: [geo_knowledge.creative_id],
+        references: [creatives.id],
     }),
 }));
 
