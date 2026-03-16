@@ -4,14 +4,18 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
+import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { RedisService } from '../../src/shared/redis/redis.service';
 import { CacheService } from '../../src/modules/engine/services/cache.service';
 
 describe('RTB API (e2e)', () => {
-  let app: INestApplication;
+  let app: NestFastifyApplication;
   let redisClient: any;
 
   beforeAll(async () => {
@@ -19,8 +23,15 @@ describe('RTB API (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter()
+    );
+    app.useGlobalPipes(new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }));
     await app.init();
+    await app.getHttpAdapter().getInstance().ready();
 
     // Get Redis client for test setup
     const redisService = app.get(RedisService);
@@ -74,19 +85,14 @@ describe('RTB API (e2e)', () => {
         .expect(400);
     });
 
-    it('should return no-bid for empty impression array', () => {
+    it('should reject empty impression array', () => {
       return request(app.getHttpServer())
         .post('/rtb/bid')
         .send({
           id: 'test-request-2',
           imp: [],
         })
-        .expect(200)
-        .expect((res) => {
-          // Should return no-bid response
-          expect(res.body).toHaveProperty('id', 'test-request-2');
-          expect(res.body).not.toHaveProperty('seatbid');
-        });
+        .expect(400);
     });
 
     it('should process valid banner bid request', () => {

@@ -24,6 +24,7 @@ export const advertisers = pgTable('advertisers', {
     // Numeric types in Postgres return as string in JS, use parseFloat when reading if needed
     balance: numeric('balance', { precision: 12, scale: 4 }).default('0'),
     daily_budget: numeric('daily_budget', { precision: 12, scale: 4 }).default('0'),
+    brand_weight: numeric('brand_weight', { precision: 6, scale: 4 }).default('1.0'),
     status: integer('status').default(Status.ACTIVE),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
@@ -142,6 +143,46 @@ export const targetingRulesRelations = relations(targeting_rules, ({ one }) => (
     }),
 }));
 
+// --- GEO KNOWLEDGE ---
+export const geo_knowledge = pgTable('geo_knowledge', {
+    id: serial('id').primaryKey(),
+    advertiser_id: integer('advertiser_id')
+        .notNull()
+        .references(() => advertisers.id),
+    campaign_id: integer('campaign_id')
+        .references(() => campaigns.id),
+    creative_id: integer('creative_id')
+        .references(() => creatives.id),
+    title: varchar('title', { length: 255 }).notNull(),
+    content: text('content').notNull(),
+    source_url: varchar('source_url', { length: 1024 }),
+    embedding_status: varchar('embedding_status', { length: 20 }).default('pending'),
+    milvus_pk: varchar('milvus_pk', { length: 64 }),
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    advertiserIdx: index('geo_knowledge_advertiser_id_idx').on(table.advertiser_id),
+    campaignIdx: index('geo_knowledge_campaign_id_idx').on(table.campaign_id),
+    statusIdx: index('geo_knowledge_status_idx').on(table.status),
+}));
+
+export const geoKnowledgeRelations = relations(geo_knowledge, ({ one }) => ({
+    advertiser: one(advertisers, {
+        fields: [geo_knowledge.advertiser_id],
+        references: [advertisers.id],
+    }),
+    campaign: one(campaigns, {
+        fields: [geo_knowledge.campaign_id],
+        references: [campaigns.id],
+    }),
+    creative: one(creatives, {
+        fields: [geo_knowledge.creative_id],
+        references: [creatives.id],
+    }),
+}));
+
 // --- AUDIENCE INTERESTS ---
 export const audience_interests = pgTable('audience_interests', {
     id: serial('id').primaryKey(),
@@ -249,6 +290,33 @@ export const campaign_hourly_performance = pgTable('campaign_hourly_performance'
     billable_count_today: integer('billable_count_today'),
     billable_count_total: integer('billable_count_total'),
 });
+
+// --- USER IDENTITIES (用户多ID映射) ---
+export const IdentityType = {
+    DEVICE_ID: 'device_id',       // 设备ID (cookie, web storage)
+    IDFA: 'idfa',                 // iOS Identifier for Advertisers
+    GAID: 'gaid',                 // Google Advertising ID
+    OAID: 'oaid',                 // Android OAID (中国)
+    EMAIL_HASH: 'email_hash',     // Email SHA256 hash
+    PHONE_HASH: 'phone_hash',     // Phone SHA256 hash
+    CUSTOM: 'custom',             // 自定义ID类型
+} as const;
+
+export const user_identities = pgTable('user_identities', {
+    user_id: varchar('user_id', { length: 255 }).notNull(),
+    identity_type: varchar('identity_type', { length: 50 }).notNull(),
+    identity_value: varchar('identity_value', { length: 255 }).notNull(),
+    source: varchar('source', { length: 100 }), // 来源标识 (如 'pixel', 'sdk', 'upload')
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    // 联合主键: 同一类型的ID值唯一
+    pk: primaryKey({ columns: [table.identity_type, table.identity_value] }),
+    // 按user_id查询索引
+    userIdIdx: index('user_identities_user_id_idx').on(table.user_id),
+    // 按类型查询索引
+    typeIdx: index('user_identities_type_idx').on(table.identity_type),
+}));
 
 // --- USER PROFILES ---
 export const user_profiles = pgTable('user_profiles', {

@@ -218,16 +218,19 @@ export class TargetingMatcher {
 
     /**
      * Match segment rule: user belongs to at least one of the specified segments.
+     * Uses pre-populated context.segment_ids from RedisUserService for efficiency.
      */
     private async matchSegments(segmentIds: any, context: UserContext): Promise<boolean> {
-        if (!context.user_id) return false; // No user id, can't match
+        // Use pre-populated segment_ids from RedisUserService (populated during identity resolution)
+        if (!context.segment_ids || context.segment_ids.length === 0) {
+            return false; // No segments for this user
+        }
         if (!segmentIds) return false;
-        if (!this.segmentService) return false; // Segment service not available
 
         const targetSegments = Array.isArray(segmentIds) ? segmentIds : [segmentIds];
         if (targetSegments.length === 0) return false;
 
-        const userSegments = await this.segmentService.getUserSegmentIds(context.user_id);
-        return targetSegments.some(segId => userSegments.includes(Number(segId)));
+        // Check if user belongs to any of the target segments
+        return targetSegments.some(segId => context.segment_ids!.includes(Number(segId)));
     }
 }

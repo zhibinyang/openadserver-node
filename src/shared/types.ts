@@ -17,6 +17,7 @@ export enum BidType {
     CPC = 2, // Cost per click
     CPA = 3, // Cost per action/conversion
     OCPM = 4, // Optimized CPM
+    GEO = 5,  // GEO ads - knowledge snippets ranked by relevance
 }
 
 /**
@@ -38,6 +39,7 @@ export enum CreativeType {
     NATIVE = 2,
     VIDEO = 3,
     INTERSTITIAL = 4,
+    GEO_SNIPPET = 5, // GEO knowledge snippet
 }
 
 /**
@@ -124,6 +126,12 @@ export interface AdCandidate {
 
     // Extra info
     metadata?: Record<string, any>;
+
+    // GEO ad fields
+    geo_score?: number;       // Milvus vector similarity (0-1)
+    relevance_score?: number; // Gemini naturalness score (0-1)
+    snippet?: string;         // Knowledge snippet text
+    knowledge_id?: number;    // Knowledge snippet ID
 }
 
 /**
@@ -132,6 +140,11 @@ export interface AdCandidate {
 export interface UserContext {
     user_id?: string;
     user_hash?: number; // Hash for bucketing
+
+    // Identity (for Redis-based user resolution)
+    identity_type?: string;  // device_id, idfa, gaid, oaid, email_hash, phone_hash, custom
+    identity_value?: string; // The actual ID value
+    internal_uid?: string;   // Internal unified UID from Redis
 
     // Device
     os: string;
@@ -169,4 +182,12 @@ export interface UserContext {
     interests?: string[];
     app_categories?: string[];
     custom_features?: Record<string, any>;
+
+    // Segment IDs (populated by RedisUserService)
+    segment_ids?: number[];
+
+    // GEO request fields
+    query?: string;           // GEO search query
+    is_geo_request?: boolean; // Whether this is a GEO request
+    min_score?: number;       // Minimum total score threshold for filtering
 }

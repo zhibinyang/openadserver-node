@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../shared/redis/redis.module';
@@ -16,9 +16,13 @@ import { RankingService } from './pipeline/4-ranking.service';
 import { RerankService } from './pipeline/5-rerank.service';
 import { AdEngine } from './ad-engine.service';
 import { GeoIpService } from './services/geoip.service';
+import { UserIdentityService } from './services/user-identity.service';
 import { UserProfileService } from './services/user-profile.service';
 import { SegmentService } from './services/segment.service';
+import { RedisUserService } from './services/redis-user.service';
+import { RedisSegmentService } from './services/redis-segment.service';
 import { EngineController } from './engine.controller';
+import { GeoModule } from '../geo/geo.module';
 
 @Module({
     imports: [
@@ -26,6 +30,7 @@ import { EngineController } from './engine.controller';
         RedisModule,
         ScheduleModule.forRoot(),
         AnalyticsModule,
+        forwardRef(() => GeoModule),
     ],
     providers: [
         CacheService,
@@ -38,8 +43,13 @@ import { EngineController } from './engine.controller';
         ResponseBuilderFactory,
         GeoIpService,
         CalibrationService,
+        // User Identity & Profile
+        UserIdentityService,
         UserProfileService,
         SegmentService,
+        // Redis-based User Service
+        RedisUserService,
+        RedisSegmentService,
         // Pipeline Steps
         RetrievalService,
         FilterService,
@@ -50,6 +60,6 @@ import { EngineController } from './engine.controller';
         AdEngine,
     ],
     controllers: [EngineController],
-    exports: [CacheService, AdEngine, CalibrationService, SegmentService],
+    exports: [CacheService, AdEngine, CalibrationService, SegmentService, UserProfileService, UserIdentityService, RedisUserService, RedisSegmentService],
 })
 export class EngineModule { }

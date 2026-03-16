@@ -4,6 +4,15 @@ import { DRIZZLE } from '../../../database/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../database/schema';
 import { eq, inArray } from 'drizzle-orm';
+import { UserIdentityService } from './user-identity.service';
+
+/**
+ * Identity item for batch operations
+ */
+export interface IdentityItem {
+    identity_type: string;
+    identity_value: string;
+}
 
 @Injectable()
 export class SegmentService {
@@ -14,6 +23,7 @@ export class SegmentService {
 
     constructor(
         private readonly redisService: RedisService,
+        private readonly userIdentityService: UserIdentityService,
         @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
     ) { }
 
@@ -112,6 +122,90 @@ export class SegmentService {
         }
 
         return result.length;
+    }
+
+    /**
+     * 通过身份标识批量添加用户到人群包
+     * 自动解析身份并创建用户映射
+     *
+     * @param segmentId 人群包ID
+     * @param identities 身份列表 [{identity_type, identity_value}]
+     * @param expiresAt 过期时间
+     * @returns 添加的用户数量
+     */
+    async addIdentitiesToSegment(
+        segmentId: number,
+        identities: IdentityItem[],
+        expiresAt?: Date,
+    ): Promise<{ added_count: number; user_ids: string[] }> {
+        if (identities.length === 0) return { added_count: 0, user_ids: [] };
+
+        const userIds: string[] = [];
+
+        // 解析所有身份标识
+        for (const identity of identities) {
+            const resolveResult = await this.userIdentityService.resolveUserId(
+                identity.identity_type,
+                identity.identity_value,
+            );
+            userIds.push(resolveResult.user_id);
+        }
+
+        // 添加到人群包
+        const addedCount = await this.addUsersToSegment(segmentId, userIds, expiresAt);
+
+        return { added_count: addedCount, user_ids: userIds };
+    }
+
+    /**
+     * 通过统一身份类型批量添加用户到人群包
+     * 所有身份使用相同的类型
+     *
+     * @param segmentId 人群包ID
+     * @param identityType 身份类型
+     * @param identityValues 身份值列表
+     * @param expiresAt 过期时间
+     */
+    async addIdentitiesToSegmentByType(
+        segmentId: number,
+        identityType: string,
+        identityValues: string[],
+        expiresAt?: Date,
+    ): Promise<{ added_count: number; user_ids: string[] }> {
+        const identities: IdentityItem[] = identityValues.map(value => ({
+            identity_type: identityType,
+            identity_value: value,
+        }));
+        return this.addIdentitiesToSegment(segmentId, identities, expiresAt);
+    }
+
+    /**
+     * 通过身份标识检查用户是否属于指定人群包
+     */
+    async isIdentityInSegment(
+        identityType: string,
+        identityValue: string,
+        segmentId: number,
+    ): Promise<boolean> {
+        const resolveResult = await this.userIdentityService.resolveUserId(
+            identityType,
+            identityValue,
+        );
+        return this.isUserInSegment(resolveResult.user_id, segmentId);
+    }
+
+    /**
+     * 通过身份标识获取用户所属的所有人群组ID
+     */
+    async getSegmentIdsByIdentity(
+        identityType: string,
+        identityValue: string,
+    ): Promise<number[]> {
+        const resolveResult = await this.userIdentityService.resolveUserId(
+            identityType,
+            identityValue,
+        );
+        return this.getUserSegmentIds(resolveResult.user_id);
     }
 
     /**

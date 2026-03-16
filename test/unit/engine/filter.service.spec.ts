@@ -34,6 +34,9 @@ describe('FilterService', () => {
   function createContext(overrides: Partial<UserContext> = {}): UserContext {
     return {
       user_id: 'user-001',
+      os: 'iOS',
+      ip: '192.168.1.1',
+      app_id: 'test-app',
       ...overrides,
     };
   }
@@ -146,7 +149,15 @@ describe('FilterService', () => {
     });
 
     it('should pass candidate with budget remaining', async () => {
-      // Set up partial spend
+      // Set up partial spend with DAILY_ASAP pacing to avoid probabilistic throttling
+      mockCacheService.getCampaign.mockImplementation((id: number) => ({
+        id,
+        budget_daily: '100.00',
+        budget_total: '1000.00',
+        freq_cap_daily: 10,
+        pacing_type: 3, // DAILY_ASAP - no throttling until limit hit
+      }));
+
       const today = new Date().toISOString().split('T')[0];
       await mockRedis.hset(`budget:1:${today}`, 'spent_today', '50');
 

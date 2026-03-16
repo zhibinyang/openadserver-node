@@ -2,6 +2,7 @@
 import { Controller, Post, Body, Get, Query, Req, Res, BadRequestException, Logger } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
+import { GeoAdRequestDto } from './dto/geo-ad-request.dto';
 import { UserContext, CreativeType, EventType } from '../../shared/types';
 import { GeoIpService } from './services/geoip.service';
 import { randomUUID } from 'crypto';
@@ -11,6 +12,7 @@ import { UAParser } from 'ua-parser-js';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { CacheService } from './services/cache.service';
 import { RedisService } from '../../shared/redis/redis.service';
+import { RedisUserService } from './services/redis-user.service';
 
 @Controller('ad')
 export class EngineController {
@@ -23,6 +25,7 @@ export class EngineController {
         private readonly analyticsService: AnalyticsService,
         private readonly cacheService: CacheService,
         private readonly redisService: RedisService,
+        private readonly redisUserService: RedisUserService,
     ) { }
 
     @Post('get')
@@ -31,7 +34,7 @@ export class EngineController {
             throw new BadRequestException('slot_type is required for /ad/get');
         }
         const requestId = randomUUID();
-        const context = this.buildContext(body, req);
+        const context = await this.buildContext(body, req);
         const candidates = await this.adEngine.recommend(context, body.slot_id);
 
         // Log winning campaign's current budget and spend asynchronously
@@ -94,7 +97,7 @@ export class EngineController {
         @Res() res: FastifyReply
     ): Promise<void> {
         const requestId = randomUUID();
-        const context = this.buildContext(query, req);
+        const context = await this.buildContext(query, req);
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, query.slot_id);
 
@@ -149,7 +152,7 @@ export class EngineController {
         @Res() res: FastifyReply
     ): Promise<void> {
         const requestId = randomUUID();
-        const context = this.buildContext(body, req);
+        const context = await this.buildContext(body, req);
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
         const candidates = await this.adEngine.recommend(context, body.slot_id);
 
@@ -195,7 +198,7 @@ export class EngineController {
         res.send(xml);
     }
 
-    private buildContext(dto: AdRequestDto, req: FastifyRequest): UserContext {
+    private async buildContext(dto: AdRequestDto, req: FastifyRequest): Promise<UserContext> {
         // 1. IP Detection Logic
         // Priority: DTO > X-Forwarded-For (Last) > Req IP
         let ip = dto.ip;
@@ -254,7 +257,67 @@ export class EngineController {
             num_ads: dto.num_ads || 1,
         };
 
-        // 4. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided
+        // 4. Redis-based identity resolution and user data retrieval
+        if (dto.identity_type && dto.identity_value) {
+            try {
+                const userData = await this.redisUserService.getUserDataByIdentity(
+                    dto.identity_type,
+                    dto.identity_value,
+                    true, // Create if not exists
+                );
+
+                if (userData) {
+                    context.identity_type = dto.identity_type;
+                    context.identity_value = dto.identity_value;
+                    context.internal_uid = userData.internal_uid;
+
+                    // Populate profile data if available
+                    if (userData.profile) {
+                        // Use profile data as fallback if not provided in DTO
+                        if (!context.user_id) {
+                            context.user_id = userData.internal_uid;
+                        }
+                        if (!context.age && userData.profile.age) {
+                            context.age = userData.profile.age;
+                        }
+                        if (!context.gender && userData.profile.gender) {
+                            context.gender = userData.profile.gender;
+                        }
+                        if (!context.interests?.length && userData.profile.interests?.length) {
+                            context.interests = userData.profile.interests;
+                        }
+                    }
+
+                    // Populate segment IDs for targeting
+                    if (userData.segmentIds?.length) {
+                        context.segment_ids = userData.segmentIds;
+                    }
+                }
+            } catch (e) {
+                this.logger.warn(`Failed to resolve identity: ${e}`);
+            }
+        } else if (dto.user_id) {
+            // Legacy: Try to resolve by user_id as device_id for backward compatibility
+            try {
+                const userData = await this.redisUserService.getUserDataByIdentity(
+                    'device_id',
+                    dto.user_id,
+                    true,
+                );
+
+                if (userData) {
+                    context.internal_uid = userData.internal_uid;
+
+                    if (userData.segmentIds?.length) {
+                        context.segment_ids = userData.segmentIds;
+                    }
+                }
+            } catch (e) {
+                this.logger.warn(`Failed to resolve legacy user_id: ${e}`);
+            }
+        }
+
+        // 5. Fallback: Parse User-Agent / Client Hints if OS/Device/Browser not provided
         if (context.os === 'unknown' || !context.device || !context.browser) {
             try {
                 // @ts-ignore
@@ -344,5 +407,70 @@ export class EngineController {
         } catch (err) {
             this.logger.warn(`Failed to log winning campaign pacing: ${err}`);
         }
+    }
+
+    @Post('geo')
+    async getGeoAd(@Body() body: GeoAdRequestDto, @Req() req: FastifyRequest): Promise<any> {
+        if (!body.query) {
+            throw new BadRequestException('query is required for /ad/geo');
+        }
+
+        const requestId = randomUUID();
+        const context = await this.buildContext(body as any, req);
+        context.is_geo_request = true;
+        context.query = body.query;
+        context.num_ads = body.num_ads || 3;
+        context.min_score = body.min_score ?? 0.6;
+
+        const candidates = await this.adEngine.recommend(context, body.slot_id || 'geo');
+
+        // Log as IMPRESSION (reusing existing event type)
+        candidates.forEach(c => {
+            c.click_id = randomUUID();
+            this.analyticsService.trackEvent({
+                request_id: requestId,
+                click_id: c.click_id,
+                campaign_id: c.campaign_id,
+                creative_id: c.creative_id,
+                user_id: context.user_id,
+                device: context.device,
+                browser: context.browser,
+                event_type: EventType.IMPRESSION,
+                event_time: Date.now(),
+                cost: 0,
+                ip: context.ip,
+                country: context.country,
+                city: context.city,
+                bid: c.bid,
+                price: c.actual_cost ?? c.bid,
+                os: context.os,
+                referer: context.referer,
+                slot_type: context.slot_type,
+                slot_id: context.slot_id || 'geo',
+                bid_type: c.bid_type,
+                ecpm: c.ecpm || null,
+                page_context: context.page_context || body.query,
+                pctr: c.pctr || null,
+                pcvr: c.pcvr || null,
+            });
+        });
+
+        // Build GEO-specific response
+        return {
+            request_id: requestId,
+            query: body.query,
+            results: candidates.map(c => ({
+                knowledge_id: c.knowledge_id,
+                creative_id: c.creative_id,
+                campaign_id: c.campaign_id,
+                title: c.title,
+                snippet: c.snippet,
+                source_url: c.landing_url,
+                score: c.score,
+                geo_score: c.geo_score,
+                relevance_score: c.relevance_score,
+                click_id: c.click_id,
+            })),
+        };
     }
 }

@@ -79,4 +79,93 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     async hmget(key: string, ...fields: string[]): Promise<(string | null)[]> {
         return this.redis.hmget(key, ...fields);
     }
+
+    // --- Hash Operations ---
+
+    async hset(key: string, field: string, value: string, ttlSeconds?: number): Promise<void> {
+        await this.redis.hset(key, field, value);
+        if (ttlSeconds) {
+            await this.redis.expire(key, ttlSeconds);
+        }
+    }
+
+    async hsetmulti(key: string, fieldValueMap: Record<string, string>, ttlSeconds?: number): Promise<void> {
+        if (Object.keys(fieldValueMap).length === 0) return;
+        await this.redis.hset(key, fieldValueMap);
+        if (ttlSeconds) {
+            await this.redis.expire(key, ttlSeconds);
+        }
+    }
+
+    async hget(key: string, field: string): Promise<string | null> {
+        return this.redis.hget(key, field);
+    }
+
+    async hgetall(key: string): Promise<Record<string, string>> {
+        return this.redis.hgetall(key);
+    }
+
+    async hdel(key: string, ...fields: string[]): Promise<number> {
+        return this.redis.hdel(key, ...fields);
+    }
+
+    async hexists(key: string, field: string): Promise<boolean> {
+        const result = await this.redis.hexists(key, field);
+        return result === 1;
+    }
+
+    // --- Set Operations ---
+
+    async sadd(key: string, ...members: string[]): Promise<number> {
+        return this.redis.sadd(key, ...members);
+    }
+
+    async saddWithTTL(key: string, ttlSeconds: number, ...members: string[]): Promise<number> {
+        const result = await this.redis.sadd(key, ...members);
+        await this.redis.expire(key, ttlSeconds);
+        return result;
+    }
+
+    async srem(key: string, ...members: string[]): Promise<number> {
+        return this.redis.srem(key, ...members);
+    }
+
+    async sismember(key: string, member: string): Promise<boolean> {
+        const result = await this.redis.sismember(key, member);
+        return result === 1;
+    }
+
+    async smembers(key: string): Promise<string[]> {
+        return this.redis.smembers(key);
+    }
+
+    async scard(key: string): Promise<number> {
+        return this.redis.scard(key);
+    }
+
+    // --- Key Operations ---
+
+    async del(key: string): Promise<number> {
+        return this.redis.del(key);
+    }
+
+    async exists(key: string): Promise<boolean> {
+        return this.redis.exists(key).then(n => n === 1);
+    }
+
+    async ttl(key: string): Promise<number> {
+        return this.redis.ttl(key);
+    }
+
+    // --- Pipeline Support ---
+
+    pipeline() {
+        return this.redis.pipeline();
+    }
+
+    // --- Multi/Transaction Support ---
+
+    multi() {
+        return this.redis.multi();
+    }
 }
