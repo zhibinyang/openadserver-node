@@ -189,4 +189,5 @@ export interface UserContext {
     // GEO request fields
     query?: string;           // GEO search query
     is_geo_request?: boolean; // Whether this is a GEO request
+    min_score?: number;       // Minimum total score threshold for filtering
 }

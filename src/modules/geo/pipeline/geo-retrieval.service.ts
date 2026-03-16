@@ -144,12 +144,16 @@ export class GeoRetrievalService {
             );
         }
 
+        // 8. Filter by min_score and sort
+        const minScore = context.min_score ?? 0.6;
+        const filtered = top3.filter(c => (c.score || 0) >= minScore);
+        
         // Sort by final score descending
-        top3.sort((a, b) => (b.score || 0) - (a.score || 0));
+        filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
 
         const duration = Date.now() - start;
-        this.logger.log(`GEO pipeline finished in ${duration}ms. Returned ${top3.length} candidates.`);
+        this.logger.log(`GEO pipeline finished in ${duration}ms. Returned ${filtered.length} candidates (min_score=${minScore}).`);
 
-        return top3;
+        return filtered;
     }
 }

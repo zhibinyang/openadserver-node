@@ -420,6 +420,7 @@ export class EngineController {
         context.is_geo_request = true;
         context.query = body.query;
         context.num_ads = body.num_ads || 3;
+        context.min_score = body.min_score ?? 0.6;
 
         const candidates = await this.adEngine.recommend(context, body.slot_id || 'geo');
 

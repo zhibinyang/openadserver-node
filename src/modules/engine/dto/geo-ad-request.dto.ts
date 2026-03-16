@@ -58,4 +58,9 @@ export class GeoAdRequestDto {
     @IsOptional()
     @Type(() => Number)
     num_ads?: number = 3;
+
+    @IsNumber()
+    @IsOptional()
+    @Type(() => Number)
+    min_score?: number = 0.6;
 }
