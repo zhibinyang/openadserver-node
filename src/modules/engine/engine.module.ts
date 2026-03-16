@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../shared/redis/redis.module';
@@ -22,6 +22,7 @@ import { SegmentService } from './services/segment.service';
 import { RedisUserService } from './services/redis-user.service';
 import { RedisSegmentService } from './services/redis-segment.service';
 import { EngineController } from './engine.controller';
+import { GeoModule } from '../geo/geo.module';
 
 @Module({
     imports: [
@@ -29,6 +30,7 @@ import { EngineController } from './engine.controller';
         RedisModule,
         ScheduleModule.forRoot(),
         AnalyticsModule,
+        forwardRef(() => GeoModule),
     ],
     providers: [
         CacheService,

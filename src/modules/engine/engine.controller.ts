@@ -2,6 +2,7 @@
 import { Controller, Post, Body, Get, Query, Req, Res, BadRequestException, Logger } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
+import { GeoAdRequestDto } from './dto/geo-ad-request.dto';
 import { UserContext, CreativeType, EventType } from '../../shared/types';
 import { GeoIpService } from './services/geoip.service';
 import { randomUUID } from 'crypto';
@@ -406,5 +407,69 @@ export class EngineController {
         } catch (err) {
             this.logger.warn(`Failed to log winning campaign pacing: ${err}`);
         }
+    }
+
+    @Post('geo')
+    async getGeoAd(@Body() body: GeoAdRequestDto, @Req() req: FastifyRequest): Promise<any> {
+        if (!body.query) {
+            throw new BadRequestException('query is required for /ad/geo');
+        }
+
+        const requestId = randomUUID();
+        const context = await this.buildContext(body as any, req);
+        context.is_geo_request = true;
+        context.query = body.query;
+        context.num_ads = body.num_ads || 3;
+
+        const candidates = await this.adEngine.recommend(context, body.slot_id || 'geo');
+
+        // Log as IMPRESSION (reusing existing event type)
+        candidates.forEach(c => {
+            c.click_id = randomUUID();
+            this.analyticsService.trackEvent({
+                request_id: requestId,
+                click_id: c.click_id,
+                campaign_id: c.campaign_id,
+                creative_id: c.creative_id,
+                user_id: context.user_id,
+                device: context.device,
+                browser: context.browser,
+                event_type: EventType.IMPRESSION,
+                event_time: Date.now(),
+                cost: 0,
+                ip: context.ip,
+                country: context.country,
+                city: context.city,
+                bid: c.bid,
+                price: c.actual_cost ?? c.bid,
+                os: context.os,
+                referer: context.referer,
+                slot_type: context.slot_type,
+                slot_id: context.slot_id || 'geo',
+                bid_type: c.bid_type,
+                ecpm: c.ecpm || null,
+                page_context: context.page_context || body.query,
+                pctr: c.pctr || null,
+                pcvr: c.pcvr || null,
+            });
+        });
+
+        // Build GEO-specific response
+        return {
+            request_id: requestId,
+            query: body.query,
+            results: candidates.map(c => ({
+                knowledge_id: c.knowledge_id,
+                creative_id: c.creative_id,
+                campaign_id: c.campaign_id,
+                title: c.title,
+                snippet: c.snippet,
+                source_url: c.landing_url,
+                score: c.score,
+                geo_score: c.geo_score,
+                relevance_score: c.relevance_score,
+                click_id: c.click_id,
+            })),
+        };
     }
 }

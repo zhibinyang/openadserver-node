@@ -1,11 +1,12 @@
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional, Inject, forwardRef } from '@nestjs/common';
 import { UserContext, AdCandidate } from '../../shared/types';
 import { RetrievalService } from './pipeline/1-retrieval.service';
 import { FilterService } from './pipeline/2-filter.service';
 import { PredictionService } from './pipeline/3-prediction.service';
 import { RankingService } from './pipeline/4-ranking.service';
 import { RerankService } from './pipeline/5-rerank.service';
+import { GeoRetrievalService } from '../geo/pipeline/geo-retrieval.service';
 
 @Injectable()
 export class AdEngine {
@@ -17,6 +18,9 @@ export class AdEngine {
         private predictionStep: PredictionService,
         private rankingStep: RankingService,
         private rerankStep: RerankService,
+        @Optional()
+        @Inject(forwardRef(() => GeoRetrievalService))
+        private geoRetrievalService?: GeoRetrievalService,
     ) { }
 
     /**
@@ -28,6 +32,11 @@ export class AdEngine {
         context: UserContext,
         slotId: string,
     ): Promise<AdCandidate[]> {
+        // GEO requests use an independent pipeline
+        if (context.is_geo_request && context.query && this.geoRetrievalService) {
+            return this.geoRetrievalService.execute(context);
+        }
+
         const start = Date.now();
         let candidates: AdCandidate[] = [];
 
