@@ -104,17 +104,23 @@ export class GeoRetrievalService {
 
         if (candidates.length === 0) return [];
 
-        // 5. AI scoring for Top 3
+        // 5. AI scoring for Top 3 (parallel processing)
         // Sort by geo_score first to pick the best
         candidates.sort((a, b) => (b.geo_score || 0) - (a.geo_score || 0));
 
         const top3 = candidates.slice(0, 3);
-        for (const candidate of top3) {
-            candidate.relevance_score = await this.geoScoringService.scoreRelevance(
-                query,
-                candidate.snippet || '',
-            );
-        }
+
+        // Score all candidates in parallel for better performance
+        const relevanceScores = await Promise.all(
+            top3.map(candidate =>
+                this.geoScoringService.scoreRelevance(query, candidate.snippet || '')
+            )
+        );
+
+        // Assign scores back to candidates
+        top3.forEach((candidate, index) => {
+            candidate.relevance_score = relevanceScores[index];
+        });
 
         // 6. Fetch brand_weight for advertisers
         const advertiserIds = [...new Set(top3.map(c => c.advertiser_id))];
