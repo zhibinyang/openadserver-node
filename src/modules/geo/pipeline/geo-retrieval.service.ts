@@ -2,7 +2,7 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { DRIZZLE } from '../../../database/database.module';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../database/schema';
-import { eq } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import { AdCandidate, UserContext, BidType, CreativeType } from '../../../shared/types';
 import { EmbeddingService } from '../services/embedding.service';
 import { MilvusService, MilvusSearchResult } from '../services/milvus.service';
@@ -50,22 +50,22 @@ export class GeoRetrievalService {
 
         if (milvusResults.length === 0) return [];
 
-        // 3. Fetch knowledge snippets from Postgres
+        // 3. Fetch knowledge snippets from Postgres (efficient IN query)
         const knowledgeIds = milvusResults.map(r => r.knowledge_id);
         const knowledgeRows = await this.db
             .select()
             .from(schema.geo_knowledge)
             .where(
-                // Use IN query - build filter dynamically
-                eq(schema.geo_knowledge.status, 1), // ACTIVE only
+                and(
+                    inArray(schema.geo_knowledge.id, knowledgeIds),
+                    eq(schema.geo_knowledge.status, 1), // ACTIVE only
+                ),
             );
 
         // Build a map for quick lookup
         const knowledgeMap = new Map<number, typeof knowledgeRows[0]>();
         for (const row of knowledgeRows) {
-            if (knowledgeIds.includes(row.id)) {
-                knowledgeMap.set(row.id, row);
-            }
+            knowledgeMap.set(row.id, row);
         }
 
         // 4. Build candidates and filter
