@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package events;
+
+// Video VTR event type enumeration
+enum VideoEventType {
+    VIDEO_EVENT_TYPE_UNKNOWN = 0;
+    VIDEO_EVENT_TYPE_START = 1;
+    VIDEO_EVENT_TYPE_FIRST_QUARTILE = 2;
+    VIDEO_EVENT_TYPE_MIDPOINT = 3;
+    VIDEO_EVENT_TYPE_THIRD_QUARTILE = 4;
+    VIDEO_EVENT_TYPE_COMPLETE = 5;
+}
+
+// Video VTR event - records video playback progress
+message VideoVTREvent {
+    string click_id = 1;                    // Correlates with AdEvent
+    int64 event_time = 2;                   // Unix timestamp in milliseconds
+    VideoEventType event_type = 3;
+    int32 progress_percent = 4;             // 0, 25, 50, 75, 100
+}
