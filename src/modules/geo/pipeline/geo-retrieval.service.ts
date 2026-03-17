@@ -32,6 +32,11 @@ export class GeoRetrievalService {
      * 6. Final ranking with brand_weight
      */
     async execute(context: UserContext): Promise<AdCandidate[]> {
+        // Check if GEO feature is enabled
+        if (!this.milvusService.isEnabled) {
+            return [];
+        }
+
         const query = context.query;
         if (!query) {
             this.logger.warn('GEO request without query');

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MilvusClient, DataType } from '@zilliz/milvus2-sdk-node';
 
@@ -15,23 +15,45 @@ export interface MilvusSearchResult {
 @Injectable()
 export class MilvusService implements OnModuleInit {
     private readonly logger = new Logger(MilvusService.name);
-    private client: MilvusClient;
+    private client: MilvusClient | null = null;
+    private enabled: boolean;
 
-    constructor(private configService: ConfigService) {}
+    constructor(private configService: ConfigService) {
+        this.enabled = this.configService.get<string>('ENABLE_GEO', 'false') === 'true';
+    }
+
+    get isEnabled(): boolean {
+        return this.enabled && this.client !== null;
+    }
 
     async onModuleInit() {
+        if (!this.enabled) {
+            this.logger.log('GEO feature disabled (ENABLE_GEO not set to "true"). Milvus connection skipped.');
+            return;
+        }
+
         const host = this.configService.get<string>('MILVUS_HOST', 'localhost');
         const port = this.configService.get<string>('MILVUS_PORT', '19530');
         const address = `${host}:${port}`;
 
         this.logger.log(`Connecting to Milvus at ${address}...`);
-        this.client = new MilvusClient({ address });
 
-        await this.ensureCollection();
-        this.logger.log('Milvus connection and collection ready.');
+        try {
+            this.client = new MilvusClient({ address });
+            await this.ensureCollection();
+            this.logger.log('Milvus connection and collection ready.');
+        } catch (err) {
+            this.logger.error(`Failed to connect to Milvus: ${err instanceof Error ? err.message : String(err)}`);
+            this.logger.warn('GEO ads will not be available. Service continuing without Milvus.');
+            this.client = null;
+        }
     }
 
     private async ensureCollection() {
+        if (!this.client) {
+            throw new Error('Milvus client not initialized');
+        }
+
         const hasCollection = await this.client.hasCollection({
             collection_name: COLLECTION_NAME,
         });
@@ -63,6 +85,11 @@ export class MilvusService implements OnModuleInit {
     }
 
     async search(vector: number[], topK: number = 50, filter?: string): Promise<MilvusSearchResult[]> {
+        if (!this.client) {
+            this.logger.warn('Milvus client not available, returning empty results');
+            return [];
+        }
+
         const searchParams: any = {
             collection_name: COLLECTION_NAME,
             vector,
