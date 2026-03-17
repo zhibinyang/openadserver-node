@@ -168,7 +168,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
             timestamp: Date.now().toString(),
             headers: {
               eventType,
-              encoding: 'json',
+              encoding: 'protobuf',
             },
           },
         ],

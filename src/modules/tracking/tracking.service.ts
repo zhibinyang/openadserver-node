@@ -110,6 +110,8 @@ export class TrackingService {
         if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) {
             eventType = EventType.CONVERSION;
         }
+        // These assignments are only used by the legacy analytics service below
+        // The new event pipeline handles all video types directly as VIDEO_VTR in sendToEventPipeline()
         if (dto.type === TrackingType.VIDEO_START) eventType = EventType.VIDEO_START;
         if (dto.type === TrackingType.VIDEO_FIRST_QUARTILE) eventType = EventType.VIDEO_FIRST_QUARTILE;
         if (dto.type === TrackingType.VIDEO_MIDPOINT) eventType = EventType.VIDEO_MIDPOINT;

@@ -16,7 +16,10 @@
       "Bash(docker:*)",
       "Bash(psql:*)",
       "Bash(source:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npm install:*)",
+      "Bash(npx nest:*)",
+      "Bash(docker-compose config:*)"
     ]
   }
 }
