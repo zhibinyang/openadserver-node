@@ -26,8 +26,9 @@ export class ProtoEncoderService {
     try {
       this.root = new protobuf.Root();
 
-      // Load all proto files
-      const schemaPath = join(__dirname, '../schemas');
+      // Load proto files from source directory (works in dev and production)
+      const projectRoot = process.cwd();
+      const schemaPath = join(projectRoot, 'src', 'modules', 'events', 'schemas');
 
       await this.loadProtoFile(join(schemaPath, 'request.proto'));
       await this.loadProtoFile(join(schemaPath, 'ad.proto'));
