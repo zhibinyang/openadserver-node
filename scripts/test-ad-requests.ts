@@ -165,6 +165,21 @@ async function postAdRequest(params: any): Promise<any> {
     return response.json();
 }
 
+async function postVastRequest(params: any): Promise<string> {
+    const response = await fetch(`${API_BASE}/ad/vast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    return response.text();
+}
+
 /**
  * Determine the best test context for a campaign based on its targeting rules
  */
@@ -340,6 +355,49 @@ async function main() {
     console.log(`Total creatives tested: ${results.length}`);
     console.log(`Passed: ${passCount}`);
     console.log(`Failed: ${failCount}`);
+
+    // 6. Test VAST endpoint for video creatives
+    console.log('\n' + '='.repeat(60));
+    console.log('VAST ENDPOINT TEST');
+    console.log('='.repeat(60));
+
+    const videoCreatives = creatives.filter(c => c.creative_type === 3); // VIDEO type
+    let vastPassCount = 0;
+    let vastFailCount = 0;
+
+    // Group video creatives by campaign and test each unique targeting context
+    const videoCampaignIds = [...new Set(videoCreatives.map(c => c.campaign_id))];
+
+    for (const campaignId of videoCampaignIds) {
+        const campaign = campaignMap.get(campaignId);
+        if (!campaign) continue;
+
+        const campaignVideoCreatives = videoCreatives.filter(c => c.campaign_id === campaignId);
+        const context = getTestContextForCampaign(rules, campaignId);
+        const params = buildRequestParams(campaignVideoCreatives[0], context);
+
+        try {
+            const vastXml = await postVastRequest(params);
+
+            // Check if VAST contains any video ad (not empty)
+            const hasAd = vastXml.includes('<Ad ') && !vastXml.includes('<VAST version="3.0">\n</VAST>');
+            const adTitleMatch = vastXml.match(/<AdTitle>([^<]+)<\/AdTitle>/);
+            const returnedTitle = adTitleMatch ? adTitleMatch[1] : null;
+
+            if (hasAd) {
+                vastPassCount++;
+                console.log(`  [PASS] VAST for Campaign "${campaign.name}" - returned: "${returnedTitle}"`);
+            } else {
+                vastFailCount++;
+                console.log(`  [FAIL] VAST for Campaign "${campaign.name}" - empty VAST response`);
+            }
+        } catch (error: any) {
+            vastFailCount++;
+            console.log(`  [ERROR] VAST for Campaign "${campaign.name}" - ${error.message}`);
+        }
+    }
+
+    console.log(`\nVAST tests: ${vastPassCount} passed, ${vastFailCount} failed`);
 
     if (failCount > 0) {
         console.log('\nFailed creatives details:');
