@@ -4,14 +4,14 @@ import { Kafka, Producer, Admin, TopicMessages } from 'kafkajs';
 
 import { EventType } from '../types/event.types';
 
-// Topic names for each event type
+// Topic names for each event type (uppercase to match Flink SQL)
 const EVENT_TOPICS: Record<EventType, string> = {
-  [EventType.REQUEST]: 'requests',
-  [EventType.AD]: 'ads',
-  [EventType.IMPRESSION]: 'impressions',
-  [EventType.CLICK]: 'clicks',
-  [EventType.CONVERSION]: 'conversions',
-  [EventType.VIDEO_VTR]: 'video_vtr',
+  [EventType.REQUEST]: 'REQUEST',
+  [EventType.AD]: 'AD',
+  [EventType.IMPRESSION]: 'IMPRESSION',
+  [EventType.CLICK]: 'CLICK',
+  [EventType.CONVERSION]: 'CONVERSION',
+  [EventType.VIDEO_VTR]: 'VIDEO_VTR',
 };
 
 @Injectable()
@@ -168,7 +168,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
             timestamp: Date.now().toString(),
             headers: {
               eventType,
-              encoding: 'protobuf',
+              encoding: 'json',
             },
           },
         ],

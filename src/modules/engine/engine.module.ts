@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../shared/redis/redis.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { EventsModule } from '../events/events.module';
 import { CacheService } from './services/cache.service';
 import { TargetingMatcher } from './services/targeting.matcher';
 import { MacroReplacer } from './services/macro-replacer.service';
@@ -30,6 +31,7 @@ import { GeoModule } from '../geo/geo.module';
         RedisModule,
         ScheduleModule.forRoot(),
         AnalyticsModule,
+        EventsModule,
         forwardRef(() => GeoModule),
     ],
     providers: [

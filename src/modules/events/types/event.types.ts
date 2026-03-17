@@ -102,6 +102,7 @@ export interface AdEvent {
   campaignId: number;
   creativeId: number;
   advertiserId: number;
+  eventTime: number;
   bid: number;
   ecpm: number;
   cost: number;

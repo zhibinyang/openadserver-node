@@ -129,6 +129,7 @@ export class ProtoEncoderService {
       campaign_id: event.campaignId,
       creative_id: event.creativeId,
       advertiser_id: event.advertiserId,
+      event_time: event.eventTime,
       bid: event.bid,
       ecpm: event.ecpm,
       cost: event.cost,

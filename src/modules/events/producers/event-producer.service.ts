@@ -49,7 +49,7 @@ export class EventProducerService implements OnModuleInit {
    */
   async produce(eventType: EventType, event: AnyEvent): Promise<void> {
     try {
-      // Serialize to protobuf
+      // Serialize to Protobuf
       const protoData = this.protoEncoder.encode(eventType, event);
 
       if (this.mode === 'leveldb') {
