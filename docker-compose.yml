@@ -253,10 +253,12 @@ services:
           memory: 1G
 
   # ============================================
-  # Flink JobManager
+  # Flink JobManager (custom image with connectors pre-installed)
   # ============================================
   flink-jobmanager:
-    image: flink:1.18-scala_2.12
+    build:
+      context: ./flink
+      dockerfile: Dockerfile
     container_name: flink-jobmanager
     ports:
       - "8081:8081"  # Web UI
@@ -286,10 +288,12 @@ services:
           memory: 800M
 
   # ============================================
-  # Flink TaskManager
+  # Flink TaskManager (custom image with connectors pre-installed)
   # ============================================
   flink-taskmanager:
-    image: flink:1.18-scala_2.12
+    build:
+      context: ./flink
+      dockerfile: Dockerfile
     container_name: flink-taskmanager
     depends_on:
       - flink-jobmanager
