@@ -375,7 +375,8 @@ CREATE TABLE IF NOT EXISTS ad_video_vtr_joined_kafka_sink (
 -- Streaming Jobs
 -- =============================================================================
 -- Execute each job separately (uses 7 slots)
-
+EXECUTE STATEMENT SET
+BEGIN
 -- Job 1: Request Events → Kafka
 INSERT INTO request_events_kafka_sink
 SELECT
@@ -551,4 +552,4 @@ FROM ad_events_kafka AS a
 INNER JOIN video_vtr_events_kafka  AS v
 ON a.click_id = v.click_id
 AND v.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '1' HOUR;
-
+END;

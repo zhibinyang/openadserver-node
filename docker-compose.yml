@@ -190,6 +190,15 @@ services:
     ports:
       - "9092:9092"
     environment:
+      # --- 1. 稳定性核心：限制 JVM 内存，防止 OOM Kill ---
+      KAFKA_HEAP_OPTS: "-Xmx1024M -Xms1024M"
+
+      # --- 2. 你的业务逻辑配置 (已保留并优化) ---
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3                 # 保持你原来的 3 分区，方便 Flink 并行
+      KAFKA_LOG_RETENTION_HOURS: 24           # 建议缩短到 24h，保护磁盘空间
+
+      # --- 3. KRaft 模式核心配置 (你的原始配置) ---
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
@@ -198,29 +207,29 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_NUM_PARTITIONS: 3
-      KAFKA_LOG_RETENTION_HOURS: 168
-      # Single-node settings for replication factors (matches single broker)
+      CLUSTER_ID: "openadserver-cluster-1"
+
+      # --- 4. 单机降级配置 (防止日志刷屏) ---
+      KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: 1   # 关键：大幅减少内部 Topic 的内存占用
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      CLUSTER_ID: "openadserver-cluster-1"
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
+      test: ["CMD", "nc", "-z", "localhost", "9092"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     networks:
       - openadserver-network
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G
 
   # ============================================
   # ClickHouse
@@ -303,7 +312,7 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
         jobmanager.rpc.port: 6123
-        taskmanager.numberOfTaskSlots: 7
+        taskmanager.numberOfTaskSlots: 3
         taskmanager.memory.process.size: 2g
     volumes:
       - flink_data:/opt/flink/checkpoints

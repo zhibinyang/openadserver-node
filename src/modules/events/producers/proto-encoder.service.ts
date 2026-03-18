@@ -77,21 +77,21 @@ export class ProtoEncoderService {
     }
 
     const payload = {
-      request_id: event.requestId,
-      event_time: event.eventTime,
-      user_ids: event.userIds
+      requestId: event.requestId,
+      eventTime: event.eventTime,
+      userIds: event.userIds
         ? {
-            user_id: event.userIds.userId,
-            hashed_email: event.userIds.hashedEmail,
-            hashed_phone: event.userIds.hashedPhone,
-            device_id: event.userIds.deviceId,
-            cookiesync_id: event.userIds.cookiesyncId,
-            extended_ids: event.userIds.extendedIds,
+            userId: event.userIds.userId,
+            hashedEmail: event.userIds.hashedEmail,
+            hashedPhone: event.userIds.hashedPhone,
+            deviceId: event.userIds.deviceId,
+            cookiesyncId: event.userIds.cookiesyncId,
+            extendedIds: event.userIds.extendedIds,
           }
         : undefined,
       segments: event.segments,
-      slot_id: event.slotId,
-      slot_type: event.slotType,
+      slotId: event.slotId,
+      slotType: event.slotType,
       ip: event.ip,
       country: event.country,
       city: event.city,
@@ -99,10 +99,10 @@ export class ProtoEncoderService {
       browser: event.browser,
       os: event.os,
       referer: event.referer,
-      page_context: event.pageContext,
-      response_count: event.responseCount,
-      has_winner: event.hasWinner,
-      winning_bid: event.winningBid,
+      pageContext: event.pageContext,
+      responseCount: event.responseCount,
+      hasWinner: event.hasWinner,
+      winningBid: event.winningBid,
     };
 
     const err = messageType.verify(payload);
@@ -124,25 +124,25 @@ export class ProtoEncoderService {
     }
 
     const payload = {
-      request_id: event.requestId,
-      impression_id: event.impressionId,
-      click_id: event.clickId,
-      campaign_id: event.campaignId,
-      creative_id: event.creativeId,
-      advertiser_id: event.advertiserId,
-      event_time: event.eventTime,
+      requestId: event.requestId,
+      impressionId: event.impressionId,
+      clickId: event.clickId,
+      campaignId: event.campaignId,
+      creativeId: event.creativeId,
+      advertiserId: event.advertiserId,
+      eventTime: event.eventTime,
       bid: event.bid,
       ecpm: event.ecpm,
       cost: event.cost,
-      bid_type: event.bidType,
-      creative_type: event.creativeType,
-      banner_width: event.bannerWidth,
-      banner_height: event.bannerHeight,
-      video_duration: event.videoDuration,
-      slot_id: event.slotId,
+      bidType: event.bidType,
+      creativeType: event.creativeType,
+      bannerWidth: event.bannerWidth,
+      bannerHeight: event.bannerHeight,
+      videoDuration: event.videoDuration,
+      slotId: event.slotId,
       pctr: event.pctr,
       pcvr: event.pcvr,
-      landing_url: event.landingUrl,
+      landingUrl: event.landingUrl,
     };
 
     const err = messageType.verify(payload);
@@ -164,8 +164,8 @@ export class ProtoEncoderService {
     }
 
     const payload = {
-      click_id: event.clickId,
-      event_time: event.eventTime,
+      clickId: event.clickId,
+      eventTime: event.eventTime,
     };
 
     const err = messageType.verify(payload);
@@ -187,8 +187,8 @@ export class ProtoEncoderService {
     }
 
     const payload = {
-      click_id: event.clickId,
-      event_time: event.eventTime,
+      clickId: event.clickId,
+      eventTime: event.eventTime,
     };
 
     const err = messageType.verify(payload);
@@ -210,10 +210,10 @@ export class ProtoEncoderService {
     }
 
     const payload = {
-      click_id: event.clickId,
-      event_time: event.eventTime,
-      conversion_value: event.conversionValue,
-      conversion_type: event.conversionType,
+      clickId: event.clickId,
+      eventTime: event.eventTime,
+      conversionValue: event.conversionValue,
+      conversionType: event.conversionType,
       attributes: event.attributes,
     };
 
@@ -236,10 +236,10 @@ export class ProtoEncoderService {
     }
 
     const payload = {
-      click_id: event.clickId,
-      event_time: event.eventTime,
-      event_type: event.eventType,
-      progress_percent: event.progressPercent,
+      clickId: event.clickId,
+      eventTime: event.eventTime,
+      eventType: event.eventType,
+      progressPercent: event.progressPercent,
     };
 
     const err = messageType.verify(payload);

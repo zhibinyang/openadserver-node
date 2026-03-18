@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS request_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, request_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Ad Events Table (dimension table with ad details)
 CREATE TABLE IF NOT EXISTS ad_events (
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS ad_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Impression Events Table
 CREATE TABLE IF NOT EXISTS impression_events (
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS impression_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Click Events Table
 CREATE TABLE IF NOT EXISTS click_events (
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS click_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Conversion Events Table
 CREATE TABLE IF NOT EXISTS conversion_events (
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS conversion_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Video VTR Events Table
 CREATE TABLE IF NOT EXISTS video_vtr_events (
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS video_vtr_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- =============================================================================
 -- Joined Tables (written by Flink after stream JOINs)
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS ad_impression_joined (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Ad + Click Joined (for click analytics)
 CREATE TABLE IF NOT EXISTS ad_click_joined (
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS ad_click_joined (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Ad + Conversion Joined (for conversion analytics)
 CREATE TABLE IF NOT EXISTS ad_conversion_joined (
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS ad_conversion_joined (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (event_time, click_id)
-TTL event_time + INTERVAL 90 DAY;
+TTL toDateTime(event_time) + INTERVAL 90 DAY;
 
 -- Ad + Video VTR Joined (for video analytics)
 CREATE TABLE IF NOT EXISTS ad_video_vtr_joined (
