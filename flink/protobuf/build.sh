@@ -31,9 +31,11 @@ if [ -z "${PROTOBUF_JAR}" ]; then
     PROTOBUF_JAR=~/.m2/repository/com/google/protobuf/protobuf-java/3.25.1/protobuf-java-3.25.1.jar
 fi
 
-# Compile Java files
+# Compile Java files - target Java 11 for Flink 1.18 compatibility
 find "${BUILD_DIR}" -name "*.java" > "${BUILD_DIR}/sources.txt"
 javac -cp "${PROTOBUF_JAR}" \
+      -target 11 \
+      -source 11 \
       -d "${BUILD_DIR}/classes" \
       "@${BUILD_DIR}/sources.txt"
 

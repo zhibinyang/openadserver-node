@@ -59,3 +59,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 models/*
 !models/.gitkeep
 data
+
+# Flink Protobuf compiled JAR - recompiled on each deploy
+flink/protobuf/events.jar
+flink/*.jar
