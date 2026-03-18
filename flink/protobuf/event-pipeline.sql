@@ -71,6 +71,8 @@ CREATE TABLE IF NOT EXISTS ad_events_kafka (
     landing_url STRING,
     -- Time attribute for temporal join
     event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
+    -- Define watermark for event time (required for temporal join)
+    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -89,6 +91,11 @@ CREATE TABLE IF NOT EXISTS ad_events_kafka (
 CREATE TABLE IF NOT EXISTS impression_events_kafka (
     click_id STRING,
     event_time BIGINT,
+    -- Time attribute and watermark (required for temporal join)
+    event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
+    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
+    -- Primary key on click_id (required for versioned table)
+    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -107,6 +114,11 @@ CREATE TABLE IF NOT EXISTS impression_events_kafka (
 CREATE TABLE IF NOT EXISTS click_events_kafka (
     click_id STRING,
     event_time BIGINT,
+    -- Time attribute and watermark (required for temporal join)
+    event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
+    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
+    -- Primary key on click_id (required for versioned table)
+    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -128,6 +140,11 @@ CREATE TABLE IF NOT EXISTS conversion_events_kafka (
     conversion_value DOUBLE,
     conversion_type STRING,
     attributes MAP<STRING, STRING>,
+    -- Time attribute and watermark (required for temporal join)
+    event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
+    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
+    -- Primary key on click_id (required for versioned table)
+    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -148,6 +165,11 @@ CREATE TABLE IF NOT EXISTS video_vtr_events_kafka (
     event_time BIGINT,
     event_type STRING,
     progress_percent INT,
+    -- Time attribute and watermark (required for temporal join)
+    event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
+    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
+    -- Primary key on click_id (required for versioned table)
+    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
