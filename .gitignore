@@ -63,3 +63,5 @@ data
 # Flink Protobuf compiled JAR - recompiled on each deploy
 flink/protobuf/events.jar
 flink/*.jar
+flink/protobuf/*.jar
+flink/protobuf/flink-connector-clickhouse/
