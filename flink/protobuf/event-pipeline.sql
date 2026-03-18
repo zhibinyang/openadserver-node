@@ -94,8 +94,6 @@ CREATE TABLE IF NOT EXISTS impression_events_kafka (
     -- Time attribute and watermark (required for temporal join)
     event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
     WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
-    -- Primary key on click_id (required for versioned table)
-    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -117,8 +115,6 @@ CREATE TABLE IF NOT EXISTS click_events_kafka (
     -- Time attribute and watermark (required for temporal join)
     event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
     WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
-    -- Primary key on click_id (required for versioned table)
-    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -143,8 +139,6 @@ CREATE TABLE IF NOT EXISTS conversion_events_kafka (
     -- Time attribute and watermark (required for temporal join)
     event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
     WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
-    -- Primary key on click_id (required for versioned table)
-    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -168,8 +162,6 @@ CREATE TABLE IF NOT EXISTS video_vtr_events_kafka (
     -- Time attribute and watermark (required for temporal join)
     event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
     WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' SECOND,
-    -- Primary key on click_id (required for versioned table)
-    PRIMARY KEY (click_id) NOT ENFORCED,
     -- Metadata
     `timestamp` TIMESTAMP(3) METADATA FROM 'timestamp',
     `partition` INT METADATA FROM 'partition',
@@ -382,6 +374,7 @@ CREATE TABLE IF NOT EXISTS ad_video_vtr_joined_kafka_sink (
 -- =============================================================================
 -- Streaming Jobs
 -- =============================================================================
+-- Execute each job separately (uses 7 slots)
 
 -- Job 1: Request Events → Kafka
 INSERT INTO request_events_kafka_sink
@@ -458,8 +451,9 @@ SELECT
     a.landing_url,
     TO_TIMESTAMP_LTZ(i.event_time, 3) AS impression_time
 FROM ad_events_kafka AS a
-INNER JOIN impression_events_kafka FOR SYSTEM_TIME AS OF a.event_time_ts AS i
-ON a.click_id = i.click_id;
+INNER JOIN impression_events_kafka  AS i
+ON a.click_id = i.click_id
+AND i.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '1' HOUR;
 
 -- Job 4: Ad + Click JOIN → Kafka
 INSERT INTO ad_click_joined_kafka_sink
@@ -485,8 +479,9 @@ SELECT
     a.landing_url,
     TO_TIMESTAMP_LTZ(c.event_time, 3) AS click_time
 FROM ad_events_kafka AS a
-INNER JOIN click_events_kafka FOR SYSTEM_TIME AS OF a.event_time_ts AS c
-ON a.click_id = c.click_id;
+INNER JOIN click_events_kafka  AS c
+ON a.click_id = c.click_id
+AND c.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '1' HOUR;
 
 -- Job 5: Ad + Conversion JOIN → Kafka
 INSERT INTO ad_conversion_joined_kafka_sink
@@ -514,8 +509,9 @@ SELECT
     cv.conversion_value,
     cv.conversion_type
 FROM ad_events_kafka AS a
-INNER JOIN conversion_events_kafka FOR SYSTEM_TIME AS OF a.event_time_ts AS cv
-ON a.click_id = cv.click_id;
+INNER JOIN conversion_events_kafka  AS cv
+ON a.click_id = cv.click_id
+AND cv.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '24' HOUR;
 
 -- Job 6: Video VTR Events → Kafka
 INSERT INTO video_vtr_events_kafka_sink
@@ -552,5 +548,7 @@ SELECT
     v.event_type,
     v.progress_percent
 FROM ad_events_kafka AS a
-INNER JOIN video_vtr_events_kafka FOR SYSTEM_TIME AS OF a.event_time_ts AS v
-ON a.click_id = v.click_id;
+INNER JOIN video_vtr_events_kafka  AS v
+ON a.click_id = v.click_id
+AND v.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '1' HOUR;
+

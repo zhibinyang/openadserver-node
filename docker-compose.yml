@@ -285,7 +285,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 800M
+          memory: 2G
 
   # ============================================
   # Flink TaskManager (custom image with connectors pre-installed)
@@ -303,8 +303,8 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
         jobmanager.rpc.port: 6123
-        taskmanager.memory.process.size: 1g
-        taskmanager.numberOfTaskSlots: 1
+        taskmanager.numberOfTaskSlots: 7
+        taskmanager.memory.process.size: 2g
     volumes:
       - flink_data:/opt/flink/checkpoints
       - flink_savepoints:/opt/flink/savepoints
@@ -315,7 +315,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 3G
 
 
 volumes:
