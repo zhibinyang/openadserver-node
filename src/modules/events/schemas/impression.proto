@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package events;
+
+// Impression event - records ad impression callback
+message ImpressionEvent {
+    string click_id = 1;                    // Correlates with AdEvent
+    int64 event_time = 2;                   // Unix timestamp in milliseconds
+}

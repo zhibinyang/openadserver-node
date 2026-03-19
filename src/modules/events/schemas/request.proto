@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package events;
+
+// Slot type enumeration
+enum SlotType {
+    SLOT_TYPE_UNKNOWN = 0;
+    SLOT_TYPE_BANNER = 1;
+    SLOT_TYPE_NATIVE = 2;
+    SLOT_TYPE_VIDEO = 3;
+    SLOT_TYPE_INTERSTITIAL = 4;
+}
+
+// User identity with multiple ID types
+message UserIdentity {
+    string user_id = 1;                     // Internal user ID
+    string hashed_email = 2;
+    string hashed_phone = 3;
+    string device_id = 4;                   // IDFA/GAID
+    string cookiesync_id = 5;               // Third-party cookie sync ID
+    map<string, string> extended_ids = 6;   // Extended ID fields (key-value)
+}
+
+// Request event - records ad request context
+message RequestEvent {
+    string request_id = 1;
+    int64 event_time = 2;                   // Unix timestamp in milliseconds
+    UserIdentity user_ids = 3;
+    repeated string segments = 4;           // Matched segment IDs
+    string slot_id = 5;
+    SlotType slot_type = 6;
+    string ip = 7;
+    string country = 8;
+    string city = 9;
+    string device = 10;
+    string browser = 11;
+    string os = 12;
+    string referer = 13;
+    string page_context = 14;
+    int32 response_count = 15;              // Number of ads returned
+    bool has_winner = 16;
+    double winning_bid = 17;
+}

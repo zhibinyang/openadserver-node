@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package events;
+
+// Conversion event - records conversion callback
+message ConversionEvent {
+    string click_id = 1;                    // Correlates with AdEvent
+    int64 event_time = 2;                   // Unix timestamp in milliseconds
+    double conversion_value = 3;            // Conversion value
+    string conversion_type = 4;             // Conversion type (purchase, signup, etc.)
+    map<string, string> attributes = 5;     // Extended attributes
+}

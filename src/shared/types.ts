@@ -49,10 +49,15 @@ export enum EventType {
     IMPRESSION = 1,
     CLICK = 2,
     CONVERSION = 3,
+    /** @deprecated Use VIDEO_VTR in event pipeline with VideoEventType inside */
     VIDEO_START = 4,
+    /** @deprecated Use VIDEO_VTR in event pipeline with VideoEventType inside */
     VIDEO_FIRST_QUARTILE = 5,
+    /** @deprecated Use VIDEO_VTR in event pipeline with VideoEventType inside */
     VIDEO_MIDPOINT = 6,
+    /** @deprecated Use VIDEO_VTR in event pipeline with VideoEventType inside */
     VIDEO_THIRD_QUARTILE = 7,
+    /** @deprecated Use VIDEO_VTR in event pipeline with VideoEventType inside */
     VIDEO_COMPLETE = 8,
     REQUEST = 9, // Ad Request / Decision Log
 }

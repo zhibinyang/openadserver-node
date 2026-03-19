@@ -12,6 +12,7 @@ import { UserProfileModule } from './modules/user-profile/user-profile.module';
 import { RtbModule } from './modules/rtb/rtb.module';
 import { SspModule } from './modules/ssp/ssp.module';
 import { BidLogModule } from './modules/bid-log/bid-log.module';
+import { EventsModule } from './modules/events/events.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { BidLogModule } from './modules/bid-log/bid-log.module';
     RtbModule,
     SspModule,
     BidLogModule,
+    EventsModule, // Global - Event production with LevelDB fallback
   ],
   controllers: [AppController],
   providers: [AppService],

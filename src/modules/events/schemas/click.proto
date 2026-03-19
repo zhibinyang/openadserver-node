@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package events;
+
+// Click event - records ad click callback
+message ClickEvent {
+    string click_id = 1;                    // Correlates with AdEvent
+    int64 event_time = 2;                   // Unix timestamp in milliseconds
+}

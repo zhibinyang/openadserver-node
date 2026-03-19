@@ -6,6 +6,14 @@ import { EventType } from '../../shared/types';
 import { randomUUID } from 'crypto';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { CalibrationService } from '../engine/services/calibration.service';
+import { EventProducerService } from '../events/producers/event-producer.service';
+import {
+  ImpressionEvent,
+  ClickEvent,
+  ConversionEvent,
+  VideoVTREvent,
+  VideoEventType,
+} from '../events/types/event.types';
 
 @Injectable()
 export class TrackingService {
@@ -15,6 +23,7 @@ export class TrackingService {
         private redisService: RedisService,
         private analyticsService: AnalyticsService,
         private calibrationService: CalibrationService,
+        private eventProducer: EventProducerService,
     ) { }
 
     async track(dto: TrackingDto): Promise<void> {
@@ -91,6 +100,7 @@ export class TrackingService {
         }
 
         const today = new Date().toISOString().split('T')[0];
+        const eventTime = Date.now();
 
         // 1. Determine Event Type & Cost
         let eventType = EventType.IMPRESSION;
@@ -100,6 +110,8 @@ export class TrackingService {
         if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) {
             eventType = EventType.CONVERSION;
         }
+        // These assignments are only used by the legacy analytics service below
+        // The new event pipeline handles all video types directly as VIDEO_VTR in sendToEventPipeline()
         if (dto.type === TrackingType.VIDEO_START) eventType = EventType.VIDEO_START;
         if (dto.type === TrackingType.VIDEO_FIRST_QUARTILE) eventType = EventType.VIDEO_FIRST_QUARTILE;
         if (dto.type === TrackingType.VIDEO_MIDPOINT) eventType = EventType.VIDEO_MIDPOINT;
@@ -108,8 +120,10 @@ export class TrackingService {
 
         if (dto.cost) cost = parseFloat(dto.cost);
 
-        // 2. Persist to DB (Postgres and/or BigQuery) via AnalyticsService
-        const eventTime = new Date();
+        // 2. Send to new event pipeline (Kafka/LevelDB)
+        await this.sendToEventPipeline(dto, clickId, eventTime, cost);
+
+        // 3. Persist to DB (Postgres and/or BigQuery) via AnalyticsService (legacy, can be removed later)
         this.analyticsService.trackEvent({
             request_id: requestId,
             click_id: clickId,
@@ -117,7 +131,7 @@ export class TrackingService {
             creative_id: creativeId,
             user_id: userId,
             event_type: eventType,
-            event_time: eventTime.getTime(),
+            event_time: eventTime,
             cost: cost,
             ip: ip,
             country: country,
@@ -132,7 +146,7 @@ export class TrackingService {
             pcvr: pcvr,
         });
 
-        // 3. Update Redis Counters
+        // 4. Update Redis Counters
         // We cannot update budget/freq without campaign_id/user_id.
         // If campaignId is known (legacy path), we update.
         if (campaignId > 0) {
@@ -165,6 +179,106 @@ export class TrackingService {
                     this.redisService.hincrby(totalKey, 'count_total', 1),
                 ]);
             }
+        }
+    }
+
+    /**
+     * Send event to the new Kafka/LevelDB pipeline
+     */
+    private async sendToEventPipeline(
+        dto: TrackingDto,
+        clickId: string | undefined,
+        eventTime: number,
+        cost: number,
+    ): Promise<void> {
+        if (!clickId) {
+            this.logger.debug('No click_id, skipping event pipeline');
+            return;
+        }
+
+        try {
+            switch (dto.type) {
+                case TrackingType.IMP: {
+                    const event: ImpressionEvent = {
+                        clickId,
+                        eventTime,
+                    };
+                    await this.eventProducer.produceImpression(event);
+                    break;
+                }
+                case TrackingType.CLICK: {
+                    const event: ClickEvent = {
+                        clickId,
+                        eventTime,
+                    };
+                    await this.eventProducer.produceClick(event);
+                    break;
+                }
+                case TrackingType.CONV:
+                case TrackingType.CONVERSION: {
+                    const event: ConversionEvent = {
+                        clickId,
+                        eventTime,
+                        conversionValue: dto.conversion_value ? parseFloat(dto.conversion_value) : undefined,
+                        conversionType: 'conversion',
+                    };
+                    await this.eventProducer.produceConversion(event);
+                    break;
+                }
+                case TrackingType.VIDEO_START: {
+                    const event: VideoVTREvent = {
+                        clickId,
+                        eventTime,
+                        eventType: VideoEventType.START,
+                        progressPercent: 0,
+                    };
+                    await this.eventProducer.produceVideoVTR(event);
+                    break;
+                }
+                case TrackingType.VIDEO_FIRST_QUARTILE: {
+                    const event: VideoVTREvent = {
+                        clickId,
+                        eventTime,
+                        eventType: VideoEventType.FIRST_QUARTILE,
+                        progressPercent: 25,
+                    };
+                    await this.eventProducer.produceVideoVTR(event);
+                    break;
+                }
+                case TrackingType.VIDEO_MIDPOINT: {
+                    const event: VideoVTREvent = {
+                        clickId,
+                        eventTime,
+                        eventType: VideoEventType.MIDPOINT,
+                        progressPercent: 50,
+                    };
+                    await this.eventProducer.produceVideoVTR(event);
+                    break;
+                }
+                case TrackingType.VIDEO_THIRD_QUARTILE: {
+                    const event: VideoVTREvent = {
+                        clickId,
+                        eventTime,
+                        eventType: VideoEventType.THIRD_QUARTILE,
+                        progressPercent: 75,
+                    };
+                    await this.eventProducer.produceVideoVTR(event);
+                    break;
+                }
+                case TrackingType.VIDEO_COMPLETE: {
+                    const event: VideoVTREvent = {
+                        clickId,
+                        eventTime,
+                        eventType: VideoEventType.COMPLETE,
+                        progressPercent: 100,
+                    };
+                    await this.eventProducer.produceVideoVTR(event);
+                    break;
+                }
+            }
+        } catch (error) {
+            this.logger.error('Failed to send event to pipeline', error);
+            // Don't throw - allow tracking to continue with legacy path
         }
     }
 }

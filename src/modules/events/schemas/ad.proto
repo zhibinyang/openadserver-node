@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package events;
+
+// Creative type enumeration
+enum CreativeType {
+    CREATIVE_TYPE_UNKNOWN = 0;
+    CREATIVE_TYPE_BANNER = 1;
+    CREATIVE_TYPE_NATIVE = 2;
+    CREATIVE_TYPE_VIDEO = 3;
+    CREATIVE_TYPE_INTERSTITIAL = 4;
+    CREATIVE_TYPE_GEO_SNIPPET = 5;
+}
+
+// Bid type enumeration
+enum BidType {
+    BID_TYPE_UNKNOWN = 0;
+    BID_TYPE_CPM = 1;
+    BID_TYPE_CPC = 2;
+    BID_TYPE_CPA = 3;
+    BID_TYPE_OCPM = 4;
+    BID_TYPE_GEO = 5;
+}
+
+// Ad event - records details of each returned ad
+message AdEvent {
+    string request_id = 1;
+    int32 impression_id = 2;                // Sequence number starting from 0
+    string click_id = 3;                    // Used for correlating subsequent events
+    int32 campaign_id = 4;
+    int32 creative_id = 5;
+    int32 advertiser_id = 6;
+    int64 event_time = 7;                   // Unix timestamp in milliseconds
+    double bid = 8;
+    double ecpm = 9;
+    double cost = 10;                       // Actual cost
+    BidType bid_type = 11;
+    CreativeType creative_type = 12;
+    int32 banner_width = 13;
+    int32 banner_height = 14;
+    int32 video_duration = 15;              // Video duration in seconds
+    string slot_id = 16;
+    double pctr = 17;
+    double pcvr = 18;
+    string landing_url = 19;                // Landing page URL
+}

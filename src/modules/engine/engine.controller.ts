@@ -13,6 +13,14 @@ import { AnalyticsService } from '../analytics/analytics.service';
 import { CacheService } from './services/cache.service';
 import { RedisService } from '../../shared/redis/redis.service';
 import { RedisUserService } from './services/redis-user.service';
+import { EventProducerService } from '../events/producers/event-producer.service';
+import {
+  RequestEvent,
+  AdEvent,
+  SlotType,
+  CreativeType as EventCreativeType,
+  BidType as EventBidType,
+} from '../events/types/event.types';
 
 @Controller('ad')
 export class EngineController {
@@ -26,7 +34,115 @@ export class EngineController {
         private readonly cacheService: CacheService,
         private readonly redisService: RedisService,
         private readonly redisUserService: RedisUserService,
+        private readonly eventProducer: EventProducerService,
     ) { }
+
+    /**
+     * Convert shared CreativeType to event CreativeType enum
+     */
+    private toEventCreativeType(type: CreativeType): EventCreativeType {
+        const map: Record<CreativeType, EventCreativeType> = {
+            [CreativeType.BANNER]: EventCreativeType.BANNER,
+            [CreativeType.NATIVE]: EventCreativeType.NATIVE,
+            [CreativeType.VIDEO]: EventCreativeType.VIDEO,
+            [CreativeType.INTERSTITIAL]: EventCreativeType.INTERSTITIAL,
+            [CreativeType.GEO_SNIPPET]: EventCreativeType.GEO_SNIPPET,
+        };
+        return map[type] ?? EventCreativeType.UNKNOWN;
+    }
+
+    /**
+     * Convert shared BidType to event BidType enum
+     */
+    private toEventBidType(type: number): EventBidType {
+        const map: Record<number, EventBidType> = {
+            1: EventBidType.CPM,
+            2: EventBidType.CPC,
+            3: EventBidType.CPA,
+            4: EventBidType.OCPM,
+            5: EventBidType.GEO,
+        };
+        return map[type] ?? EventBidType.UNKNOWN;
+    }
+
+    /**
+     * Convert slot_type number to SlotType enum
+     */
+    private toSlotType(type: number | undefined): SlotType {
+        const map: Record<number, SlotType> = {
+            1: SlotType.BANNER,
+            2: SlotType.NATIVE,
+            3: SlotType.VIDEO,
+            4: SlotType.INTERSTITIAL,
+        };
+        return map[type ?? 0] ?? SlotType.UNKNOWN;
+    }
+
+    /**
+     * Produce RequestEvent and AdEvents for the new Kafka pipeline
+     */
+    private async produceEventsToKafka(
+        requestId: string,
+        context: UserContext,
+        candidates: any[],
+    ): Promise<void> {
+        const eventTime = Date.now();
+
+        // Produce RequestEvent
+        const requestEvent: RequestEvent = {
+            requestId,
+            eventTime,
+            userIds: context.internal_uid ? { userId: context.internal_uid } : undefined,
+            segments: context.segment_ids?.map(String),
+            slotId: context.slot_id,
+            slotType: this.toSlotType(context.slot_type),
+            ip: context.ip,
+            country: context.country,
+            city: context.city,
+            device: context.device,
+            browser: context.browser,
+            os: context.os,
+            referer: context.referer,
+            pageContext: context.page_context,
+            responseCount: candidates.length,
+            hasWinner: candidates.length > 0,
+            winningBid: candidates[0]?.actual_cost ?? candidates[0]?.bid,
+        };
+
+        // Fire and forget - don't await to avoid blocking response
+        this.eventProducer.produceRequest(requestEvent).catch(e =>
+            this.logger.warn(`Failed to produce request event: ${e}`),
+        );
+
+        // Produce AdEvent for each candidate
+        for (const c of candidates) {
+            const adEvent: AdEvent = {
+                requestId,
+                impressionId: c.impression_id ?? 0,
+                clickId: c.click_id!,
+                campaignId: c.campaign_id,
+                creativeId: c.creative_id,
+                advertiserId: c.advertiser_id,
+                eventTime,
+                bid: c.bid,
+                ecpm: c.ecpm ?? 0,
+                cost: c.actual_cost ?? c.bid ?? 0,
+                bidType: this.toEventBidType(c.bid_type),
+                creativeType: this.toEventCreativeType(c.creative_type),
+                bannerWidth: context.slot_width ?? c.width,
+                bannerHeight: context.slot_height ?? c.height,
+                videoDuration: c.duration ?? c.metadata?.video_duration,
+                slotId: context.slot_id,
+                pctr: c.pctr,
+                pcvr: c.pcvr,
+                landingUrl: c.landing_url,
+            };
+
+            this.eventProducer.produceAd(adEvent).catch(e =>
+                this.logger.warn(`Failed to produce ad event: ${e}`),
+            );
+        }
+    }
 
     @Post('get')
     async getAd(@Body() body: AdRequestDto, @Req() req: FastifyRequest): Promise<any> {
@@ -86,6 +202,11 @@ export class EngineController {
             });
         });
 
+        // Produce events to Kafka pipeline (fire and forget)
+        this.produceEventsToKafka(requestId, context, candidates).catch(e =>
+            this.logger.warn(`Failed to produce events to Kafka: ${e}`),
+        );
+
         const builder = this.responseFactory.getBuilder('json');
         return builder.build(candidates, context, requestId);
     }
@@ -137,6 +258,11 @@ export class EngineController {
                 pcvr: c.pcvr || null,
             });
         });
+
+        // Produce events to Kafka pipeline (fire and forget)
+        this.produceEventsToKafka(requestId, context, candidates).catch(e =>
+            this.logger.warn(`Failed to produce events to Kafka: ${e}`),
+        );
 
         const builder = this.responseFactory.getBuilder('vast');
         const xml = await builder.build(candidates, context, requestId);
@@ -190,6 +316,11 @@ export class EngineController {
                 page_context: context.page_context || null,
             });
         });
+
+        // Produce events to Kafka pipeline (fire and forget)
+        this.produceEventsToKafka(requestId, context, candidates).catch(e =>
+            this.logger.warn(`Failed to produce events to Kafka: ${e}`),
+        );
 
         const builder = this.responseFactory.getBuilder('vast');
         const xml = await builder.build(candidates, context, requestId);
@@ -454,6 +585,11 @@ export class EngineController {
                 pcvr: c.pcvr || null,
             });
         });
+
+        // Produce events to Kafka pipeline (fire and forget)
+        this.produceEventsToKafka(requestId, context, candidates).catch(e =>
+            this.logger.warn(`Failed to produce events to Kafka: ${e}`),
+        );
 
         // Build GEO-specific response
         return {
