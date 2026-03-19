@@ -302,3 +302,61 @@ docker exec -i clickhouse clickhouse-client -n < /tmp/clickhouse-init.sql
 ```bash
 git checkout flink/event-pipeline.sql
 ```
+
+---
+
+## 校准因子计算 Pipeline (Calibration Pipeline)
+
+### 概述
+新增独立的 Flink SQL 作业用于全局统一计算 CTR/CVR 校准因子，替代原有的 AdServer 直连 Redis 计算模式，解决多实例写入冲突、分散计算等问题。
+
+### 架构
+```
+┌──────────────────────┐        ┌───────────┐        ┌───────────────────────────┐
+│ AdServer 产生事件     │────────►   Kafka   │────────► Flink 24h 滑动窗口聚合     │
+│ (自动发送到Kafka)     │        │  事件流   │        │  - 多流JOIN关联所有事件    │
+└──────────────────────┘        └───────────┘        │  - 自动计算校准因子        │
+                                                     └─────────────┬─────────────┘
+                                                                   │
+                                                                   ▼
+                                                     ┌───────────────────────────┐
+                                                     │ Redis 全局缓存             │
+                                                     │ Key: calib:global:{campaignId}:{slotId} │
+                                                     │ Value: JSON包含ctr_factor/cvr_factor/update_time │
+                                                     └───────────────────────────┘
+```
+
+### 文件说明
+| 文件 | 作用 |
+|------|------|
+| `calibration-pipeline.sql` | 校准因子计算 Flink SQL 作业定义 |
+
+### 部署步骤
+1. 确保 Redis 连接器已在 Flink 集群中安装：
+   ```bash
+   # 下载 Redis 连接器
+   wget https://repo1.maven.org/maven2/org/apache/flink/flink-connector-redis_2.12/1.17.1/flink-connector-redis_2.12-1.17.1.jar
+   # 复制到 Flink 容器
+   docker cp flink-connector-redis_2.12-1.17.1.jar flink-jobmanager:/opt/flink/lib/
+   docker cp flink-connector-redis_2.12-1.17.1.jar flink-taskmanager:/opt/flink/lib/
+   # 重启 Flink 集群加载新连接器
+   docker restart flink-jobmanager flink-taskmanager
+   ```
+
+2. 提交校准作业：
+   ```bash
+   docker cp ./calibration-pipeline.sql flink-jobmanager:/opt/flink/protobuf/calibration-pipeline.sql
+   docker exec flink-jobmanager ./bin/sql-client.sh -f /opt/flink/protobuf/calibration-pipeline.sql
+   ```
+
+### 双模式切换
+AdServer 支持两种模式通过环境变量切换：
+- `CALIBRATION_MODE=direct`（默认）：原有直连 Redis 模式，AdServer 自行计算并写入 Redis
+- `CALIBRATION_MODE=global`：全局 Flink 模式，AdServer 只读取全局 Redis Key，写入逻辑由 Flink 统一处理
+
+### 降级方案
+如果 Flink 作业出现故障：
+1. 将 AdServer 环境变量 `CALIBRATION_MODE` 改回 `direct`
+2. 重启 AdServer 实例即可自动切换回原有模式
+3. 业务无中断，校准因子会由 AdServer 自动重新计算
+
