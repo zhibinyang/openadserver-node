@@ -1,140 +1,98 @@
+-- Set idle timeout to prevent empty streams (like conversions) from holding back the watermark
+-- If a partition/stream has no data for 10 seconds, it's marked as idle and its watermark is ignored.
+SET 'table.exec.source.idle-timeout' = '10 s';
+
+-- Enable early firing to output partial results before the 5min window closes (True real-time updates)
+SET 'table.exec.emit.early-fire.enabled' = 'true';
+SET 'table.exec.emit.early-fire.delay' = '5 s';
+
 -- Calibration Global Factor Calculation Pipeline
 -- This Flink SQL job computes global CTR/CVR calibration factors using 24h sliding window
 
--- Kafka Source Tables (Protobuf format, matching existing event schemas)
-CREATE TABLE ad_events_kafka (
-    click_id STRING,
+-- =============================================================================
+-- Downstream JSON Source Tables (Pre-Joined from event-pipeline)
+-- =============================================================================
+CREATE TABLE ad_impression_joined_source (
     campaign_id INT,
     slot_id STRING,
     pctr DOUBLE,
+    impression_time TIMESTAMP(3),
+    WATERMARK FOR impression_time AS impression_time - INTERVAL '5' MINUTE
+) WITH (
+    'connector' = 'kafka',
+    'topic' = 'FLINK_AD_IMPRESSION',
+    'properties.bootstrap.servers' = 'kafka:9092',
+    'properties.group.id' = 'flink-calibration-pipeline',
+    'format' = 'json',
+    'scan.startup.mode' = 'latest-offset'
+);
+
+CREATE TABLE ad_click_joined_source (
+    campaign_id INT,
+    slot_id STRING,
     pcvr DOUBLE,
-    event_time_ts TIMESTAMP(3),
-    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' MINUTE
+    click_time TIMESTAMP(3),
+    WATERMARK FOR click_time AS click_time - INTERVAL '5' MINUTE
 ) WITH (
     'connector' = 'kafka',
-    'topic' = 'ad_events',
-    'properties.bootstrap.servers' = 'localhost:9092',
+    'topic' = 'FLINK_AD_CLICK',
+    'properties.bootstrap.servers' = 'kafka:9092',
     'properties.group.id' = 'flink-calibration-pipeline',
-    'format' = 'protobuf',
-    'protobuf.message-class' = 'com.openadserver.protobuf.AdEvent',
+    'format' = 'json',
     'scan.startup.mode' = 'latest-offset'
 );
 
-CREATE TABLE impression_events_kafka (
-    click_id STRING,
-    event_time_ts TIMESTAMP(3),
-    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' MINUTE
+CREATE TABLE ad_conversion_joined_source (
+    campaign_id INT,
+    slot_id STRING,
+    conversion_time TIMESTAMP(3),
+    WATERMARK FOR conversion_time AS conversion_time - INTERVAL '5' MINUTE
 ) WITH (
     'connector' = 'kafka',
-    'topic' = 'impression_events',
-    'properties.bootstrap.servers' = 'localhost:9092',
+    'topic' = 'FLINK_AD_CONVERSION',
+    'properties.bootstrap.servers' = 'kafka:9092',
     'properties.group.id' = 'flink-calibration-pipeline',
-    'format' = 'protobuf',
-    'protobuf.message-class' = 'com.openadserver.protobuf.ImpressionEvent',
+    'format' = 'json',
     'scan.startup.mode' = 'latest-offset'
 );
 
-CREATE TABLE click_events_kafka (
-    click_id STRING,
-    event_time_ts TIMESTAMP(3),
-    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' MINUTE
-) WITH (
-    'connector' = 'kafka',
-    'topic' = 'click_events',
-    'properties.bootstrap.servers' = 'localhost:9092',
-    'properties.group.id' = 'flink-calibration-pipeline',
-    'format' = 'protobuf',
-    'protobuf.message-class' = 'com.openadserver.protobuf.ClickEvent',
-    'scan.startup.mode' = 'latest-offset'
-);
+-- =============================================================================
+-- Processing & Aggregation
+-- =============================================================================
 
-CREATE TABLE conversion_events_kafka (
-    click_id STRING,
-    event_time_ts TIMESTAMP(3),
-    WATERMARK FOR event_time_ts AS event_time_ts - INTERVAL '5' MINUTE
-) WITH (
-    'connector' = 'kafka',
-    'topic' = 'conversion_events',
-    'properties.bootstrap.servers' = 'localhost:9092',
-    'properties.group.id' = 'flink-calibration-pipeline',
-    'format' = 'protobuf',
-    'protobuf.message-class' = 'com.openadserver.protobuf.ConversionEvent',
-    'scan.startup.mode' = 'latest-offset'
-);
-
--- Step 1: Ad dimension view, stores metadata for each click_id
-CREATE TEMPORARY VIEW ad_dim AS
-SELECT click_id, campaign_id, slot_id, pctr, pcvr, event_time_ts
-FROM ad_events_kafka;
-
--- Step 2: Join impression events with ad dimension to get full attributes
-CREATE TEMPORARY VIEW impression_with_attr AS
-SELECT
-    a.campaign_id,
-    a.slot_id,
-    a.pctr,
-    i.event_time_ts
-FROM impression_events_kafka i
-INNER JOIN ad_dim a
-ON i.click_id = a.click_id
-AND a.event_time_ts BETWEEN i.event_time_ts - INTERVAL '1' HOUR AND i.event_time_ts;
-
--- Step 3: Join click events with ad dimension to get full attributes
-CREATE TEMPORARY VIEW click_with_attr AS
-SELECT
-    a.campaign_id,
-    a.slot_id,
-    a.pcvr,
-    c.event_time_ts
-FROM click_events_kafka c
-INNER JOIN ad_dim a
-ON c.click_id = a.click_id
-AND a.event_time_ts BETWEEN c.event_time_ts - INTERVAL '1' HOUR AND c.event_time_ts;
-
--- Step 4: Join conversion events with ad dimension to get full attributes
-CREATE TEMPORARY VIEW conversion_with_attr AS
-SELECT
-    a.campaign_id,
-    a.slot_id,
-    cv.event_time_ts
-FROM conversion_events_kafka cv
-INNER JOIN ad_dim a
-ON cv.click_id = a.click_id
-AND a.event_time_ts BETWEEN cv.event_time_ts - INTERVAL '24' HOUR AND cv.event_time_ts;
-
--- Step 5: Unify all events into a single stream with aligned fields
+-- Step 1: Unify all downstream events into a single stream with aligned fields
 CREATE TEMPORARY VIEW unified_events AS
 SELECT
     campaign_id,
     slot_id,
-    event_time_ts,
+    impression_time AS event_time_ts,
     pctr AS expected_clicks,
     0.0 AS actual_clicks,
     0.0 AS expected_convs,
     0.0 AS actual_convs
-FROM impression_with_attr
+FROM ad_impression_joined_source
 UNION ALL
 SELECT
     campaign_id,
     slot_id,
-    event_time_ts,
+    click_time AS event_time_ts,
     0.0,
     1.0,
     pcvr,
     0.0
-FROM click_with_attr
+FROM ad_click_joined_source
 UNION ALL
 SELECT
     campaign_id,
     slot_id,
-    event_time_ts,
+    conversion_time AS event_time_ts,
     0.0,
     0.0,
     0.0,
     1.0
-FROM conversion_with_attr;
+FROM ad_conversion_joined_source;
 
--- Step 6: Calculate calibration factors using 24h sliding window
+-- Step 2: Calculate calibration factors using 24h sliding window
 CREATE TEMPORARY VIEW calibration_result AS
 SELECT
     campaign_id,
@@ -150,25 +108,29 @@ GROUP BY
     -- Sliding window configuration: 24h window size, 5min slide interval
     HOP(event_time_ts, INTERVAL '5' MINUTE, INTERVAL '24' HOUR);
 
--- Redis Sink Table
+-- =============================================================================
+-- Redis Sink
+-- =============================================================================
+
 CREATE TABLE redis_calibration_sink (
-    key STRING PRIMARY KEY,
-    value STRING
+    `key` STRING PRIMARY KEY NOT ENFORCED,
+    `value` STRING
 ) WITH (
     'connector' = 'redis',
-    'host' = 'localhost',
+    'host' = 'redis',
     'port' = '6379',
+    'redis-mode' = 'single',
     'command' = 'SET',
-    'key.ttl' = '7200' -- 2 hours expiration
+    'ttl' = '7200' -- 2 hours expiration
 );
 
--- Step 7: Write results to Redis
+-- Step 3: Write results to Redis
 INSERT INTO redis_calibration_sink
 SELECT
-    CONCAT('calib:global:', campaign_id, ':', slot_id) as key,
+    CONCAT('calib:global:', CAST(campaign_id AS STRING), ':', slot_id) as `key`,
     JSON_OBJECT(
-        'ctr_factor', ctr_factor,
-        'cvr_factor', cvr_factor,
-        'update_time', update_time
-    ) as value
+        KEY 'ctr_factor' VALUE ctr_factor,
+        KEY 'cvr_factor' VALUE cvr_factor,
+        KEY 'update_time' VALUE CAST(update_time AS STRING)
+    ) as `value`
 FROM calibration_result;
