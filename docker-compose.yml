@@ -7,27 +7,33 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "80:3000"
+      - "3000:3000"
     environment:
       - NODE_ENV=production
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DATABASE_URL=postgresql://oas:oas_password@postgres:5432/oas
-      - BASE_URL=https://ads.zhibinyang.net
       - MODEL_CVR_PATH=/usr/src/app/models/pcvr_deepfm_model_latest.onnx
       - MODEL_CTR_PATH=/usr/src/app/models/pctr_deepfm_model_latest.onnx
       - FEATURE_CONFIG_PATH=/usr/src/app/models/feature_config_latest.json
       - GEO_DB_PATH=/usr/src/app/libs/geo/GeoLite2-City.mmdb
       - GOOGLE_CLOUD_PROJECT=node-quest-zbyang
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/credential.json
-      - WRITE_TARGET=BOTH
+      - WRITE_TARGET=POSTGRES
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
       - GEMINI_EMBEDDING_MODEL=gemini-embedding-001
       - GEMINI_LLM_MODEL=gemini-3.1-flash-lite-preview
-      # Kafka 配置
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+        # Kafka 配置
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_ENABLED=true
+      - KAFKA_CLIENT_ID=openadserver
+      - KAFKA_COMPRESSION=snappy
+      - EVENT_PRODUCER_MODE=auto
+      - KAFKAJS_NO_PARTITIONER_WARNING=1
+      - CALIBRATION_MODE=global
+      - ENABLE_GEO=true
     depends_on:
       postgres:
         condition: service_healthy

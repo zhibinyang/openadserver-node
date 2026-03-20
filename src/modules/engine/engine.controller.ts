@@ -207,8 +207,9 @@ export class EngineController {
             this.logger.warn(`Failed to produce events to Kafka: ${e}`),
         );
 
+        const host = req.headers.host || 'localhost:3000';
         const builder = this.responseFactory.getBuilder('json');
-        return builder.build(candidates, context, requestId);
+        return builder.build(candidates, context, requestId, host);
     }
 
     @Get('vast')
@@ -264,8 +265,9 @@ export class EngineController {
             this.logger.warn(`Failed to produce events to Kafka: ${e}`),
         );
 
+        const host = req.headers.host || 'localhost:3000';
         const builder = this.responseFactory.getBuilder('vast');
-        const xml = await builder.build(candidates, context, requestId);
+        const xml = await builder.build(candidates, context, requestId, host);
 
         res.header('Content-Type', 'text/xml');
         res.send(xml);
@@ -322,8 +324,9 @@ export class EngineController {
             this.logger.warn(`Failed to produce events to Kafka: ${e}`),
         );
 
+        const host = req.headers.host || 'localhost:3000';
         const builder = this.responseFactory.getBuilder('vast');
-        const xml = await builder.build(candidates, context, requestId);
+        const xml = await builder.build(candidates, context, requestId, host);
 
         res.header('Content-Type', 'text/xml');
         res.send(xml);

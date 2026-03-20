@@ -429,3 +429,106 @@ ORDER BY (toDate(ad_event_time), ad_event_time, click_id);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS ad_video_vtr_joined_mv TO ad_video_vtr_joined AS
 SELECT * FROM ad_video_vtr_joined_kafka;
+
+-- =============================================================================
+-- 8. Hourly & Daily Event Counts (Aggregated Materialized Views)
+-- =============================================================================
+
+-- 统一的聚合汇总表 (使用 SummingMergeTree 自动累加 total_count)
+CREATE TABLE IF NOT EXISTS hourly_events_count
+(
+    event_date Date,
+    event_hour DateTime,
+    event_type String,
+    total_count UInt64
+)
+ENGINE = SummingMergeTree()
+ORDER BY (event_date, event_hour, event_type);
+
+-- Request 计数物化视图
+CREATE MATERIALIZED VIEW IF NOT EXISTS request_hourly_mv TO hourly_events_count AS
+SELECT
+    toDate(event_time) AS event_date,
+    toStartOfHour(event_time) AS event_hour,
+    'request' AS event_type,
+    toUInt64(count()) AS total_count
+FROM request_events
+GROUP BY event_date, event_hour;
+
+-- Ad Event (Impression/Bid 等) 计数物化视图
+CREATE MATERIALIZED VIEW IF NOT EXISTS ad_events_hourly_mv TO hourly_events_count AS
+SELECT
+    toDate(event_time) AS event_date,
+    toStartOfHour(event_time) AS event_hour,
+    'ad_event' AS event_type,
+    toUInt64(count()) AS total_count
+FROM ad_events
+GROUP BY event_date, event_hour;
+
+-- Click 计数物化视图
+CREATE MATERIALIZED VIEW IF NOT EXISTS click_hourly_mv TO hourly_events_count AS
+SELECT
+    toDate(click_time) AS event_date,
+    toStartOfHour(click_time) AS event_hour,
+    'click' AS event_type,
+    toUInt64(count()) AS total_count
+FROM ad_click_joined
+GROUP BY event_date, event_hour;
+
+-- Conversion 计数物化视图
+CREATE MATERIALIZED VIEW IF NOT EXISTS conversion_hourly_mv TO hourly_events_count AS
+SELECT
+    toDate(conversion_time) AS event_date,
+    toStartOfHour(conversion_time) AS event_hour,
+    'conversion' AS event_type,
+    toUInt64(count()) AS total_count
+FROM ad_conversion_joined
+GROUP BY event_date, event_hour;
+
+-- =============================================================================
+-- 9. Query Views (普通查询视图：封装过滤与实时聚合逻辑)
+-- =============================================================================
+
+-- Request 查询视图：严格保证每小时1条记录，且只包含 request
+CREATE VIEW IF NOT EXISTS request_hourly_view AS
+SELECT
+    event_date,
+    event_hour,
+    event_type,
+    sum(total_count) AS total_count
+FROM hourly_events_count
+WHERE event_type = 'request'
+GROUP BY event_date, event_hour, event_type;
+
+-- Ad Event 查询视图
+CREATE VIEW IF NOT EXISTS ad_events_hourly_view AS
+SELECT
+    event_date,
+    event_hour,
+    event_type,
+    sum(total_count) AS total_count
+FROM hourly_events_count
+WHERE event_type = 'ad_event'
+GROUP BY event_date, event_hour, event_type;
+
+-- Click 查询视图
+CREATE VIEW IF NOT EXISTS click_hourly_view AS
+SELECT
+    event_date,
+    event_hour,
+    event_type,
+    sum(total_count) AS total_count
+FROM hourly_events_count
+WHERE event_type = 'click'
+GROUP BY event_date, event_hour, event_type;
+
+-- Conversion 查询视图
+CREATE VIEW IF NOT EXISTS conversion_hourly_view AS
+SELECT
+    event_date,
+    event_hour,
+    event_type,
+    sum(total_count) AS total_count
+FROM hourly_events_count
+WHERE event_type = 'conversion'
+GROUP BY event_date, event_hour, event_type;

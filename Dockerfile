@@ -36,6 +36,9 @@ COPY --from=builder /usr/src/app/models ./models
 # Copy debug scripts if needed
 COPY --from=builder /usr/src/app/scripts ./scripts
 
+# Copy Proto
+COPY --from=builder /usr/src/app/src/modules/events/schemas ./src/modules/events/schemas
+
 EXPOSE 3000
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

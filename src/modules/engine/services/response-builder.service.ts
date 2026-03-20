@@ -10,7 +10,8 @@ export interface AdResponseBuilder {
     build(
         candidates: AdCandidate[],
         context: UserContext,
-        requestId: string
+        requestId: string,
+        host: string
     ): Promise<any>;
 }
 
@@ -23,9 +24,10 @@ export class JsonResponseBuilder implements AdResponseBuilder {
         private readonly redisService: RedisService,
     ) { }
 
-    async build(candidates: AdCandidate[], context: UserContext, requestId: string): Promise<any> {
+    async build(candidates: AdCandidate[], context: UserContext, requestId: string, host: string): Promise<any> {
         const numAds = candidates.length; // Or limit handled before
-        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+        const protocol = host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https';
+        const baseUrl = `${protocol}://${host}`;
 
         const enrichedCandidates = await Promise.all(
             candidates.map(async (c) => {
@@ -107,7 +109,7 @@ export class VastResponseBuilder implements AdResponseBuilder {
         private readonly vastBuilder: VastBuilder,
     ) { }
 
-    async build(candidates: AdCandidate[], context: UserContext, requestId: string): Promise<string> {
+    async build(candidates: AdCandidate[], context: UserContext, requestId: string, host: string): Promise<string> {
         if (candidates.length === 0) {
             return this.vastBuilder.buildEmpty();
         }
@@ -115,7 +117,8 @@ export class VastResponseBuilder implements AdResponseBuilder {
         // VAST usually returns one ad per response for basic implementations
         const c = candidates[0];
         const clickId = c.click_id || randomUUID();
-        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+        const protocol = host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https';
+        const baseUrl = `${protocol}://${host}`;
 
         // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
         const costToPay = c.actual_cost ?? c.bid;
