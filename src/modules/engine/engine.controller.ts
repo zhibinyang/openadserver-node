@@ -126,7 +126,7 @@ export class EngineController {
                 eventTime,
                 bid: c.bid,
                 ecpm: c.ecpm ?? 0,
-                cost: c.actual_cost ?? c.bid ?? 0,
+                cost: c.bid_type === 1 ? (c.actual_cost ?? c.bid ?? 0) / 1000 : (c.actual_cost ?? c.bid ?? 0),
                 bidType: this.toEventBidType(c.bid_type),
                 creativeType: this.toEventCreativeType(c.creative_type),
                 bannerWidth: context.slot_width ?? c.width,

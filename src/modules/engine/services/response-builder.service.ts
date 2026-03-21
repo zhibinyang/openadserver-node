@@ -17,7 +17,7 @@ export interface AdResponseBuilder {
 
 @Injectable()
 export class JsonResponseBuilder implements AdResponseBuilder {
-    private readonly CLICK_ID_TTL = 30 * 24 * 60 * 60; // 30 days
+    private readonly CLICK_ID_TTL = 25 * 60 * 60; // 25 hours
 
     constructor(
         private readonly macroReplacer: MacroReplacer,
@@ -101,7 +101,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
 
 @Injectable()
 export class VastResponseBuilder implements AdResponseBuilder {
-    private readonly CLICK_ID_TTL = 30 * 24 * 60 * 60; // 30 days
+    private readonly CLICK_ID_TTL = 25 * 60 * 60; // 25 hours
 
     constructor(
         private readonly macroReplacer: MacroReplacer,

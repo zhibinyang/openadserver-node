@@ -107,7 +107,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 256M
 
   # ============================================
   # Milvus Vector Database
@@ -265,7 +265,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
 
   # ============================================
   # Flink JobManager (custom image with connectors pre-installed)

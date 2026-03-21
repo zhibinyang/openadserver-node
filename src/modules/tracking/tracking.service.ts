@@ -32,6 +32,7 @@ export class TrackingService {
         let userId: string | undefined;
         let requestId: string = '';
         let clickId = dto.click_id;
+        let clickIdValid = false; // 标记click_id是否有效（从Redis成功取到数据）
 
         // Context fields - Now mostly empty for lightweight tracking
         let device: string | undefined;
@@ -52,6 +53,7 @@ export class TrackingService {
             if (cachedData) {
                 try {
                     const parsed = JSON.parse(cachedData);
+                    clickIdValid = true; // click_id有效，成功从Redis取到数据
                     campaignId = parsed.campaignId;
                     creativeId = parsed.creativeId;
                     userId = parsed.userId || dto.uid || '';
@@ -109,6 +111,11 @@ export class TrackingService {
         if (dto.type === TrackingType.CLICK) eventType = EventType.CLICK;
         if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) {
             eventType = EventType.CONVERSION;
+            // 转化事件必须有有效的click_id（在Redis中存在），否则直接丢弃，即使有cid/crid也不处理
+            if (!dto.click_id || !clickIdValid) {
+                this.logger.warn(`Discarded conversion event with invalid/expired click_id: ${dto.click_id}`);
+                return;
+            }
         }
         // These assignments are only used by the legacy analytics service below
         // The new event pipeline handles all video types directly as VIDEO_VTR in sendToEventPipeline()
