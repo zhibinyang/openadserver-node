@@ -1,11 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../../shared/redis/redis.service';
 
 @Injectable()
 export class CalibrationService {
     private readonly logger = new Logger(CalibrationService.name);
+    private readonly calibrationMode: 'direct' | 'global';
 
-    constructor(private readonly redisService: RedisService) { }
+    constructor(
+        private readonly redisService: RedisService,
+        private readonly configService: ConfigService
+    ) {
+        this.calibrationMode = this.configService.get<'direct' | 'global'>('CALIBRATION_MODE', 'direct');
+    }
 
     /**
      * Storage structure:
@@ -22,6 +29,7 @@ export class CalibrationService {
     }
 
     async logImpression(campaignId: number, slotId: string, pctr: number) {
+        if (this.calibrationMode === 'global') return;
         if (!campaignId || !slotId) return;
         const key = this.getHourKey(campaignId, slotId);
         await this.redisService.hincrbyfloat(key, 'expected_clicks', pctr);
@@ -29,6 +37,7 @@ export class CalibrationService {
     }
 
     async logClick(campaignId: number, slotId: string, pcvr: number) {
+        if (this.calibrationMode === 'global') return;
         if (!campaignId || !slotId) return;
         const key = this.getHourKey(campaignId, slotId);
         await this.redisService.hincrby(key, 'actual_clicks', 1);
@@ -37,6 +46,7 @@ export class CalibrationService {
     }
 
     async logConversion(campaignId: number, slotId: string) {
+        if (this.calibrationMode === 'global') return;
         if (!campaignId || !slotId) return;
         const key = this.getHourKey(campaignId, slotId);
         await this.redisService.hincrby(key, 'actual_convs', 1);
@@ -46,6 +56,28 @@ export class CalibrationService {
     async getCalibratedPredictions(campaignId: number, slotId: string, pctr: number, pcvr: number): Promise<{ pctr: number, pcvr: number, ctr_factor: number, cvr_factor: number }> {
         if (!campaignId || !slotId) return { pctr, pcvr, ctr_factor: 1, cvr_factor: 1 };
 
+        // Global mode: read single global key from Flink calculation
+        if (this.calibrationMode === 'global') {
+            try {
+                const globalKey = `calib:global:${campaignId}:${slotId}`;
+                const data = await this.redisService.get(globalKey);
+                if (data) {
+                    const { ctr_factor, cvr_factor } = JSON.parse(data);
+                    return {
+                        pctr: pctr * (ctr_factor ?? 1),
+                        pcvr: pcvr * (cvr_factor ?? 1),
+                        ctr_factor: ctr_factor ?? 1,
+                        cvr_factor: cvr_factor ?? 1
+                    };
+                }
+                return { pctr, pcvr, ctr_factor: 1, cvr_factor: 1 };
+            } catch (error) {
+                this.logger.warn(`Failed to fetch global calibration data for campaign ${campaignId}: ${error}`);
+                return { pctr, pcvr, ctr_factor: 1, cvr_factor: 1 };
+            }
+        }
+
+        // Direct mode: original logic
         let expected_clicks = 0;
         let actual_clicks = 0;
         let expected_convs = 0;

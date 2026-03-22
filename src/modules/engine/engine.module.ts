@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from '../../database/database.module';
 import { RedisModule } from '../../shared/redis/redis.module';
@@ -27,6 +28,7 @@ import { GeoModule } from '../geo/geo.module';
 
 @Module({
     imports: [
+        ConfigModule,
         DatabaseModule,
         RedisModule,
         ScheduleModule.forRoot(),
