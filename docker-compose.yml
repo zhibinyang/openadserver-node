@@ -91,7 +91,7 @@ services:
   # ============================================
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 384mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     ports:
@@ -107,7 +107,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
 
   # ============================================
   # Milvus Vector Database
