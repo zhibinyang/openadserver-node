@@ -1,9 +1,9 @@
 
 import { Injectable } from '@nestjs/common';
-import { AdCandidate, UserContext } from '../../../shared/types';
+import { AdCandidate, CreativeType, UserContext } from '../../../shared/types';
 import { MacroReplacer } from './macro-replacer.service';
 import { RedisService } from '../../../shared/redis/redis.service';
-import { randomUUID } from 'crypto';
+import { generateUUIDv7 } from '../../../shared/utils/uuid';
 import { VastBuilder } from './vast-builder';
 
 export interface AdResponseBuilder {
@@ -17,8 +17,6 @@ export interface AdResponseBuilder {
 
 @Injectable()
 export class JsonResponseBuilder implements AdResponseBuilder {
-    private readonly CLICK_ID_TTL = 25 * 60 * 60; // 25 hours
-
     constructor(
         private readonly macroReplacer: MacroReplacer,
         private readonly redisService: RedisService,
@@ -31,28 +29,15 @@ export class JsonResponseBuilder implements AdResponseBuilder {
 
         const enrichedCandidates = await Promise.all(
             candidates.map(async (c) => {
-                const clickId = c.click_id || randomUUID();
+                // Use same UUIDv7 for both imp_id and click_id
+                const trackingId = c.click_id || generateUUIDv7();
+                const clickId = trackingId;
+                const impId = trackingId;
 
-                // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
+                // Calculate costs (no longer store in Redis here - will store on impression)
                 const costToPay = c.actual_cost ?? c.bid;
                 const clickCost = c.bid_type === 2 ? costToPay : 0; // CPC = 2
                 const convCost = c.bid_type === 3 ? costToPay : 0; // CPA = 3. OCPM charges per impression.
-                await this.redisService.set(`click:${clickId}`, JSON.stringify({
-                    requestId,
-                    campaignId: c.campaign_id,
-                    creativeId: c.creative_id,
-                    userId: context.user_id || context.ip,
-                    device: context.device,
-                    os: context.os,
-                    browser: context.browser,
-                    country: context.country,
-                    city: context.city,
-                    slotId: context.slot_id || '',
-                    pctr: c.pctr || 0,
-                    pcvr: c.pcvr || 0,
-                    clickCost,
-                    convCost
-                }), this.CLICK_ID_TTL);
 
                 // Macro replacement
                 const originalLandingUrl = this.macroReplacer.replace(c.landing_url, {
@@ -74,7 +59,7 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                 const impCost = c.bid_type === 1 ? costToPay / 1000 : (c.bid_type === 4 ? ocpmEcpm / 1000 : 0); // CPM = 1, OCPM = 4
 
                 const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
-                const landingUrl = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
+                const landingUrl = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}`;
 
                 return {
                     ad_id: `ad_${c.campaign_id}_${c.creative_id}`,
@@ -85,9 +70,11 @@ export class JsonResponseBuilder implements AdResponseBuilder {
                     image_url: c.image_url,
                     video_url: c.video_url,
                     landing_url: landingUrl,
-                    imp_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp${trackingQuery}&cost=${impCost}`,
-                    click_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=click${trackingQuery}&cost=${clickCost}`,
-                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion${trackingQuery}&conversion_value=\${CONVERSION_VALUE}&cost=${convCost}`,
+                    click_id: clickId,
+                    imp_id: impId,
+                    imp_pixel: `${baseUrl}/tracking/track?imp_id=${impId}&type=imp${trackingQuery}`,
+                    click_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=click${trackingQuery}`,
+                    conversion_pixel: `${baseUrl}/tracking/track?click_id=${clickId}&type=conversion${trackingQuery}&conversion_value=\${CONVERSION_VALUE}`,
                 };
             })
         );
@@ -101,8 +88,6 @@ export class JsonResponseBuilder implements AdResponseBuilder {
 
 @Injectable()
 export class VastResponseBuilder implements AdResponseBuilder {
-    private readonly CLICK_ID_TTL = 25 * 60 * 60; // 25 hours
-
     constructor(
         private readonly macroReplacer: MacroReplacer,
         private readonly redisService: RedisService,
@@ -116,30 +101,18 @@ export class VastResponseBuilder implements AdResponseBuilder {
 
         // VAST usually returns one ad per response for basic implementations
         const c = candidates[0];
-        const clickId = c.click_id || randomUUID();
+        // Use same UUIDv7 for both imp_id and click_id
+        const trackingId = c.click_id || generateUUIDv7();
+        const clickId = trackingId;
+        const impId = trackingId;
+
         const protocol = host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https';
         const baseUrl = `${protocol}://${host}`;
 
-        // Store click metadata in Redis to ensure conversions and clicks have context even if URL params are lost
+        // Calculate costs (no longer store in Redis here - will store on impression)
         const costToPay = c.actual_cost ?? c.bid;
         const clickCost = c.bid_type === 2 ? costToPay : 0; // CPC = 2
         const convCost = c.bid_type === 3 ? costToPay : 0; // CPA = 3
-        await this.redisService.set(`click:${clickId}`, JSON.stringify({
-            requestId,
-            campaignId: c.campaign_id,
-            creativeId: c.creative_id,
-            userId: context.user_id || context.ip,
-            device: context.device,
-            os: context.os,
-            browser: context.browser,
-            country: context.country,
-            city: context.city,
-            slotId: context.slot_id || '',
-            pctr: c.pctr || 0,
-            pcvr: c.pcvr || 0,
-            clickCost,
-            convCost
-        }), this.CLICK_ID_TTL);
 
         // Macro replacement
         const originalLandingUrl = this.macroReplacer.replace(c.landing_url, {
@@ -158,17 +131,18 @@ export class VastResponseBuilder implements AdResponseBuilder {
         const impCost = c.bid_type === 1 ? costToPay / 1000 : (c.bid_type === 4 ? ocpmEcpm / 1000 : 0); // CPM = 1, OCPM = 4
         const trackingQuery = `&cid=${c.campaign_id}&crid=${c.creative_id}`;
 
-        const clickThrough = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&p=${c.pctr || 0}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}&cost=${clickCost}`;
+        const clickThrough = `${baseUrl}/tracking/click?click_id=${clickId}&bid=${c.bid}&rid=${requestId}&to=${encodeURIComponent(internalUrl)}${trackingQuery}`;
 
+        // Video ads use imp_id for all tracking events
         const tracking = {
-            impression: `${baseUrl}/tracking/track?click_id=${clickId}&type=imp${trackingQuery}&cost=${impCost}`,
+            impression: `${baseUrl}/tracking/track?imp_id=${impId}&type=imp${trackingQuery}`,
             clickThrough: clickThrough,
-            clickTracking: `${baseUrl}/tracking/track?click_id=${clickId}&type=click${trackingQuery}&cost=${clickCost}`,
-            start: `${baseUrl}/tracking/track?click_id=${clickId}&type=start${trackingQuery}`,
-            firstQuartile: `${baseUrl}/tracking/track?click_id=${clickId}&type=firstQuartile${trackingQuery}`,
-            midpoint: `${baseUrl}/tracking/track?click_id=${clickId}&type=midpoint${trackingQuery}`,
-            thirdQuartile: `${baseUrl}/tracking/track?click_id=${clickId}&type=thirdQuartile${trackingQuery}`,
-            complete: `${baseUrl}/tracking/track?click_id=${clickId}&type=complete${trackingQuery}`,
+            clickTracking: `${baseUrl}/tracking/track?imp_id=${impId}&type=click${trackingQuery}`,
+            start: `${baseUrl}/tracking/track?imp_id=${impId}&type=start${trackingQuery}`,
+            firstQuartile: `${baseUrl}/tracking/track?imp_id=${impId}&type=firstQuartile${trackingQuery}`,
+            midpoint: `${baseUrl}/tracking/track?imp_id=${impId}&type=midpoint${trackingQuery}`,
+            thirdQuartile: `${baseUrl}/tracking/track?imp_id=${impId}&type=thirdQuartile${trackingQuery}`,
+            complete: `${baseUrl}/tracking/track?imp_id=${impId}&type=complete${trackingQuery}`,
         };
 
         return this.vastBuilder.build(c, tracking, requestId);

@@ -19,6 +19,11 @@ import {
 export class TrackingService {
     private readonly logger = new Logger(TrackingService.name);
 
+    // TTL configurations
+    private readonly IMP_TTL_VIDEO = 25 * 60 * 60; // 25 hours for video ads (all events use imp_id)
+    private readonly IMP_TTL_DEFAULT = 2 * 60 * 60; // 2 hours for non-video ads (only for impression -> click validation)
+    private readonly CLICK_TTL = 25 * 60 * 60; // 25 hours for click_id (for conversion validation)
+
     constructor(
         private redisService: RedisService,
         private analyticsService: AnalyticsService,
@@ -30,59 +35,57 @@ export class TrackingService {
         let campaignId: number = 0;
         let creativeId: number = 0;
         let userId: string | undefined;
-        let requestId: string = '';
-        let clickId = dto.click_id;
-        let clickIdValid = false; // 标记click_id是否有效（从Redis成功取到数据）
+        const impId = dto.imp_id;
+        const clickId = dto.click_id || impId; // imp_id and click_id are same value when both present
+        let trackingIdValid = false;
 
-        // Context fields - Now mostly empty for lightweight tracking
-        let device: string | undefined;
-        let os: string | undefined;
-        let browser: string | undefined;
-        let country: string | undefined;
-        let city: string | undefined;
-        let ip: string | undefined;
-        let bid = 0;
-        let slotId: string | undefined;
-        let pctr = 0;
-        let pcvr = 0;
+        // Extract basic IDs from URL params (used for event reporting)
+        campaignId = dto.cid ? parseInt(dto.cid, 10) : 0;
+        creativeId = dto.crid ? parseInt(dto.crid, 10) : 0;
+        userId = dto.uid || '';
 
-        // Try click_id-based tracking
-        if (dto.click_id) {
-            // First, attempt to load rich context from Redis
-            const cachedData = await this.redisService.get(`click:${dto.click_id}`);
-            if (cachedData) {
-                try {
-                    const parsed = JSON.parse(cachedData);
-                    clickIdValid = true; // click_id有效，成功从Redis取到数据
-                    campaignId = parsed.campaignId;
-                    creativeId = parsed.creativeId;
-                    userId = parsed.userId || dto.uid || '';
-                    requestId = parsed.requestId || '';
-                    device = parsed.device;
-                    os = parsed.os;
-                    browser = parsed.browser;
-                    country = parsed.country;
-                    city = parsed.city;
-                    slotId = parsed.slotId;
-                    pctr = parsed.pctr || 0;
-                    pcvr = parsed.pcvr || 0;
-                    // For click/conversion, adopt the pre-calculated contextual budget cost if the URL didn't specify it
-                    if (!dto.cost || dto.cost === '0') {
-                        if (dto.type === TrackingType.CLICK) bid = parsed.clickCost || 0;
-                        if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) bid = parsed.convCost || 0;
-                    }
-                    this.logger.log(`Restored tracking context from Redis for click_id: ${dto.click_id}`);
-                } catch (e) {
-                    this.logger.warn(`Failed to parse click context for ${dto.click_id}`);
+        // Try imp_id-based tracking first (new flow)
+        if (impId) {
+            // Check if imp_id exists
+            const impExists = await this.redisService.exists(`imp:${impId}`);
+            trackingIdValid = impExists > 0;
+
+            // Handle impression event: mark imp_id as existing
+            if (dto.type === TrackingType.IMP) {
+                // For simplicity, use 25h TTL for all imp entries (still 70%+ saving vs pre-storing)
+                // Can optimize to 2h for non-video later if needed
+                await this.redisService.set(`imp:${impId}`, '1', this.IMP_TTL_VIDEO);
+                trackingIdValid = true;
+                this.logger.log(`Marked imp_id as active: ${impId}`);
+            }
+
+            // Handle click event: validate imp exists first
+            if (dto.type === TrackingType.CLICK) {
+                // Reject clicks without corresponding impression
+                if (!trackingIdValid) {
+                    this.logger.warn(`Discarded click event with invalid/expired imp_id: ${impId}`);
+                    return;
+                }
+
+                // Mark click_id as existing for conversion validation
+                if (clickId) {
+                    await this.redisService.set(`click:${clickId}`, '1', this.CLICK_TTL);
+                    this.logger.log(`Marked click_id as active: ${clickId}`);
                 }
             }
 
-            // Fallback to URL defaults if Redis data was expired or missing
-            if (campaignId === undefined) {
-                campaignId = dto.cid ? parseInt(dto.cid, 10) : 0;
-                creativeId = dto.crid ? parseInt(dto.crid, 10) : 0;
-                userId = dto.uid || '';
-                requestId = ''; // Unknown unless passed
+            this.logger.log(`Tracking event (imp_id: ${impId}, cid: ${campaignId}, crid: ${creativeId})`);
+        }
+        // Fallback to click_id-based tracking (compatibility with old URLs)
+        else if (dto.click_id) {
+            // Check if click_id exists
+            const clickExists = await this.redisService.exists(`click:${dto.click_id}`);
+            trackingIdValid = clickExists > 0;
+
+            // For backward compatibility: if this is an impression on old URL, store click_id
+            if (dto.type === TrackingType.IMP) {
+                await this.redisService.set(`click:${dto.click_id}`, '1', this.CLICK_TTL);
+                trackingIdValid = true;
             }
 
             this.logger.log(`Tracking event (click_id: ${dto.click_id}, cid: ${campaignId}, crid: ${creativeId})`);
@@ -104,16 +107,25 @@ export class TrackingService {
         const today = new Date().toISOString().split('T')[0];
         const eventTime = Date.now();
 
-        // 1. Determine Event Type & Cost
+        // 1. Determine Event Type
         let eventType = EventType.IMPRESSION;
-        let cost = 0;
 
         if (dto.type === TrackingType.CLICK) eventType = EventType.CLICK;
         if (dto.type === TrackingType.CONV || dto.type === TrackingType.CONVERSION) {
             eventType = EventType.CONVERSION;
-            // 转化事件必须有有效的click_id（在Redis中存在），否则直接丢弃，即使有cid/crid也不处理
-            if (!dto.click_id || !clickIdValid) {
-                this.logger.warn(`Discarded conversion event with invalid/expired click_id: ${dto.click_id}`);
+            // 转化事件必须有有效的ID（在Redis中存在），否则直接丢弃
+            let valid = trackingIdValid;
+            let id = impId || clickId;
+
+            // If only click_id is provided, ensure it exists
+            if (!impId && dto.click_id && !valid) {
+                const clickExists = await this.redisService.exists(`click:${dto.click_id}`);
+                valid = clickExists > 0;
+                id = dto.click_id;
+            }
+
+            if (!valid) {
+                this.logger.warn(`Discarded conversion event with invalid/expired ID: ${id}`);
                 return;
             }
         }
@@ -125,10 +137,8 @@ export class TrackingService {
         if (dto.type === TrackingType.VIDEO_THIRD_QUARTILE) eventType = EventType.VIDEO_THIRD_QUARTILE;
         if (dto.type === TrackingType.VIDEO_COMPLETE) eventType = EventType.VIDEO_COMPLETE;
 
-        if (dto.cost) cost = parseFloat(dto.cost);
-
         // 2. Send to new event pipeline (Kafka/LevelDB)
-        await this.sendToEventPipeline(dto, clickId, eventTime, cost);
+        await this.sendToEventPipeline(dto, clickId, eventTime);
 
         // Legacy Postgres/BigQuery persistence removed - only Kafka pipeline is used
 
@@ -141,29 +151,10 @@ export class TrackingService {
                     const key = `freq:${userId}:${campaignId}`;
                     await this.redisService.incr(key, 86400); // 1 day TTL
                 }
-                if (slotId) {
-                    await this.calibrationService.logImpression(campaignId, slotId, pctr);
-                }
             } else if (eventType === EventType.CLICK) {
-                if (slotId) {
-                    await this.calibrationService.logClick(campaignId, slotId, pcvr);
-                }
+                // Click calibration moved to event pipeline
             } else if (eventType === EventType.CONVERSION) {
-                if (slotId) {
-                    await this.calibrationService.logConversion(campaignId, slotId);
-                }
-            }
-
-            if (cost > 0) {
-                const dailyKey = `budget:${campaignId}:${today}`;
-                const totalKey = `budget:total:${campaignId}`;
-
-                await Promise.all([
-                    this.redisService.hincrbyfloat(dailyKey, 'spent_today', cost),
-                    this.redisService.hincrbyfloat(totalKey, 'spent_total', cost),
-                    this.redisService.hincrby(dailyKey, 'count_today', 1),
-                    this.redisService.hincrby(totalKey, 'count_total', 1),
-                ]);
+                // Conversion calibration moved to event pipeline
             }
         }
     }
@@ -175,7 +166,6 @@ export class TrackingService {
         dto: TrackingDto,
         clickId: string | undefined,
         eventTime: number,
-        cost: number,
     ): Promise<void> {
         if (!clickId) {
             this.logger.debug('No click_id, skipping event pipeline');

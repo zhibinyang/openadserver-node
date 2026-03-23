@@ -17,10 +17,14 @@ export class TrackingDto {
     @IsEnum(TrackingType)
     type: TrackingType;
 
-    // Primary tracking method: click_id
+    // Primary tracking methods (imp_id = click_id = same UUIDv7)
     @IsString()
     @IsOptional()
     click_id?: string;
+
+    @IsString()
+    @IsOptional()
+    imp_id?: string;
 
     // Legacy tracking fields (for backward compatibility)
     @IsNumberString()
@@ -34,11 +38,6 @@ export class TrackingDto {
     @IsString()
     @IsOptional()
     uid?: string; // User ID
-
-    // Optional: Cost override for tracking actual spend
-    @IsNumberString()
-    @IsOptional()
-    cost?: string;
 
     // Optional: Conversion value for conversion events
     @IsNumberString()

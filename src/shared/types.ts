@@ -164,8 +164,9 @@ export interface AdCandidate {
     height?: number;
     duration?: number;
 
-    // Tracking ID (generated at response time)
+    // Tracking IDs (generated at response time, imp_id = click_id = same UUIDv7)
     click_id?: string;
+    imp_id?: string;
 
     // Extra info
     metadata?: Record<string, any>;
