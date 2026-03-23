@@ -25,11 +25,12 @@ docker cp ./events.jar flink-taskmanager:/opt/flink/protobuf/events.jar
 echo "✅ Done"
 echo ""
 
-# Step 3: Pre-create downstream Kafka topics
+# Step 3: Pre-create downstream Kafka topics for Flink pipelines
 echo "Step 3/6: Pre-creating Kafka topics for Flink pipelines..."
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic FLINK_AD_IMPRESSION --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic FLINK_AD_CLICK --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists
-docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic FLINK_AD_CONVERSION --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists
+docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic FLINK_CONVERSION --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists
+docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic FLINK_VIDEO_VTR --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists
 echo "✅ Topics created or already exist"
 echo ""
 

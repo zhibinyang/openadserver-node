@@ -97,18 +97,21 @@ message AdEvent {
     double pctr = 17;
     double pcvr = 18;
     string landing_url = 19;
+    string imp_id = 101; // imp_id = click_id, same UUIDv7 value
 }
 
 // Impression event - records ad impression callback
 message ImpressionEvent {
     string click_id = 1;
     int64 event_time = 2;
+    string imp_id = 3; // imp_id = click_id, same UUIDv7 value
 }
 
 // Click event - records ad click callback
 message ClickEvent {
     string click_id = 1;
     int64 event_time = 2;
+    string imp_id = 3; // imp_id = click_id, same UUIDv7 value
 }
 
 // Conversion event - records conversion callback
@@ -118,6 +121,7 @@ message ConversionEvent {
     double conversion_value = 3;
     string conversion_type = 4;
     map<string, string> attributes = 5;
+    string imp_id = 6; // imp_id = click_id, same UUIDv7 value
 }
 
 // Video VTR event - records video playback progress
@@ -126,4 +130,5 @@ message VideoVTREvent {
     int64 event_time = 2;
     VideoEventType event_type = 3;
     int32 progress_percent = 4;
+    string imp_id = 5; // imp_id = click_id, same UUIDv7 value
 }

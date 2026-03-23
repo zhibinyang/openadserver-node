@@ -42,65 +42,38 @@ CREATE TABLE ad_click_joined_source (
     'scan.startup.mode' = 'latest-offset'
 );
 
-CREATE TABLE ad_conversion_joined_source (
-    campaign_id INT,
-    slot_id STRING,
-    conversion_time TIMESTAMP(3),
-    WATERMARK FOR conversion_time AS conversion_time - INTERVAL '5' MINUTE
-) WITH (
-    'connector' = 'kafka',
-    'topic' = 'FLINK_AD_CONVERSION',
-    'properties.bootstrap.servers' = 'kafka:9092',
-    'properties.group.id' = 'flink-calibration-pipeline',
-    'format' = 'json',
-    'scan.startup.mode' = 'latest-offset'
-);
 
 -- =============================================================================
 -- Processing & Aggregation
 -- =============================================================================
 
--- Step 1: Unify all downstream events into a single stream with aligned fields
+-- Step 1: Unify impression and click events for CTR calculation
 CREATE TEMPORARY VIEW unified_events AS
 SELECT
     campaign_id,
     slot_id,
     impression_time AS event_time_ts,
     pctr AS expected_clicks,
-    0.0 AS actual_clicks,
-    0.0 AS expected_convs,
-    0.0 AS actual_convs
+    0.0 AS actual_clicks
 FROM ad_impression_joined_source
 UNION ALL
 SELECT
     campaign_id,
     slot_id,
     click_time AS event_time_ts,
-    0.0,
-    1.0,
-    pcvr,
-    0.0
-FROM ad_click_joined_source
-UNION ALL
-SELECT
-    campaign_id,
-    slot_id,
-    conversion_time AS event_time_ts,
-    0.0,
-    0.0,
-    0.0,
-    1.0
-FROM ad_conversion_joined_source;
+    0.0 AS expected_clicks,
+    1.0 AS actual_clicks
+FROM ad_click_joined_source;
 
--- Step 2: Calculate calibration factors using 24h sliding window
+-- Step 2: Calculate CTR calibration factor using 24h sliding window
+-- CVR calibration is now done via offline batch processing
 CREATE TEMPORARY VIEW calibration_result AS
 SELECT
     campaign_id,
     slot_id,
     HOP_END(event_time_ts, INTERVAL '5' MINUTE, INTERVAL '24' HOUR) as update_time,
     -- Same calculation logic as original TypeScript code: Laplace smoothing + threshold clamping
-    GREATEST(0.2, LEAST(2.0, (SUM(actual_clicks) + 10) / (SUM(expected_clicks) + 10))) AS ctr_factor,
-    GREATEST(0.2, LEAST(2.0, (SUM(actual_convs) + 10) / (SUM(expected_convs) + 10))) AS cvr_factor
+    GREATEST(0.2, LEAST(2.0, (SUM(actual_clicks) + 10) / (SUM(expected_clicks) + 10))) AS ctr_factor
 FROM unified_events
 GROUP BY
     campaign_id,
@@ -124,13 +97,11 @@ CREATE TABLE redis_calibration_sink (
     'ttl' = '7200' -- 2 hours expiration
 );
 
--- Step 3: Write results to Redis
+-- Step 3: Write CTR calibration factor to Redis
+-- Key format: calib:global:ctr:{campaign_id}:{slot_id}
+-- Value: plain float number (no JSON, for better performance)
 INSERT INTO redis_calibration_sink
 SELECT
-    CONCAT('calib:global:', CAST(campaign_id AS STRING), ':', slot_id) as `key`,
-    JSON_OBJECT(
-        KEY 'ctr_factor' VALUE ctr_factor,
-        KEY 'cvr_factor' VALUE cvr_factor,
-        KEY 'update_time' VALUE CAST(update_time AS STRING)
-    ) as `value`
+    CONCAT('calib:global:ctr:', CAST(campaign_id AS STRING), ':', slot_id) as `key`,
+    CAST(ctr_factor AS STRING) as `value`
 FROM calibration_result;

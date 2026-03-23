@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS ad_events_kafka
     request_id String,
     impression_id Int32,
     click_id String,
+    imp_id String,
     campaign_id Int32,
     creative_id Int32,
     advertiser_id Int32,
@@ -111,6 +112,7 @@ CREATE TABLE IF NOT EXISTS ad_events
     request_id String,
     impression_id Int32,
     click_id String,
+    imp_id String,
     campaign_id Int32,
     creative_id Int32,
     advertiser_id Int32,
@@ -140,6 +142,7 @@ SELECT * FROM ad_events_kafka;
 
 CREATE TABLE IF NOT EXISTS ad_impression_joined_kafka
 (
+    imp_id String,
     click_id String,
     request_id String,
     impression_id Int32,
@@ -171,6 +174,7 @@ SETTINGS
 
 CREATE TABLE IF NOT EXISTS ad_impression_joined
 (
+    imp_id String,
     click_id String,
     request_id String,
     impression_id Int32,
@@ -204,6 +208,7 @@ SELECT * FROM ad_impression_joined_kafka;
 
 CREATE TABLE IF NOT EXISTS ad_click_joined_kafka
 (
+    imp_id String,
     click_id String,
     request_id String,
     impression_id Int32,
@@ -235,6 +240,7 @@ SETTINGS
 
 CREATE TABLE IF NOT EXISTS ad_click_joined
 (
+    imp_id String,
     click_id String,
     request_id String,
     impression_id Int32,
@@ -263,72 +269,38 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS ad_click_joined_mv TO ad_click_joined AS
 SELECT * FROM ad_click_joined_kafka;
 
 -- -----------------------------------------------------------------------------
--- 5. ad_conversion_joined
+-- 5. conversion_events (raw, no join)
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS ad_conversion_joined_kafka
+CREATE TABLE IF NOT EXISTS conversion_events_kafka
 (
     click_id String,
-    request_id String,
-    impression_id Int32,
-    campaign_id Int32,
-    creative_id Int32,
-    advertiser_id Int32,
     event_time DateTime64(3),
-    bid Float64,
-    ecpm Float64,
-    cost Float64,
-    creative_type String,
-    bid_type String,
-    banner_width Int32,
-    banner_height Int32,
-    video_duration Int32,
-    slot_id String,
-    pctr Float64,
-    pcvr Float64,
-    landing_url String,
-    conversion_time DateTime64(3),
     conversion_value Float64,
-    conversion_type String
+    conversion_type String,
+    attributes Map(String, String)
 )
 ENGINE = Kafka()
 SETTINGS
     kafka_broker_list = 'kafka:9092',
-    kafka_topic_list = 'FLINK_AD_CONVERSION',
-    kafka_group_name = 'clickhouse-ad-conversion-consumer',
+    kafka_topic_list = 'FLINK_CONVERSION',
+    kafka_group_name = 'clickhouse-conversion-consumer',
     kafka_format = 'JSON',
     kafka_row_delimiter = '\n';
 
-CREATE TABLE IF NOT EXISTS ad_conversion_joined
+CREATE TABLE IF NOT EXISTS conversion_events
 (
     click_id String,
-    request_id String,
-    impression_id Int32,
-    campaign_id Int32,
-    creative_id Int32,
-    advertiser_id Int32,
     event_time DateTime64(3),
-    bid Float64,
-    ecpm Float64,
-    cost Float64,
-    creative_type String,
-    bid_type String,
-    banner_width Int32,
-    banner_height Int32,
-    video_duration Int32,
-    slot_id String,
-    pctr Float64,
-    pcvr Float64,
-    landing_url String,
-    conversion_time DateTime64(3),
     conversion_value Float64,
-    conversion_type String
+    conversion_type String,
+    attributes Map(String, String)
 )
 ENGINE = MergeTree()
 ORDER BY (toDate(event_time), event_time, click_id);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS ad_conversion_joined_mv TO ad_conversion_joined AS
-SELECT * FROM ad_conversion_joined_kafka;
+CREATE MATERIALIZED VIEW IF NOT EXISTS conversion_events_mv TO conversion_events AS
+SELECT * FROM conversion_events_kafka;
 
 -- -----------------------------------------------------------------------------
 -- 6. video_vtr_events
@@ -337,6 +309,7 @@ SELECT * FROM ad_conversion_joined_kafka;
 CREATE TABLE IF NOT EXISTS video_vtr_events_kafka
 (
     click_id String,
+    imp_id String,
     event_time DateTime64(3),
     event_type String,
     progress_percent Int32
@@ -352,6 +325,7 @@ SETTINGS
 CREATE TABLE IF NOT EXISTS video_vtr_events
 (
     click_id String,
+    imp_id String,
     event_time DateTime64(3),
     event_type String,
     progress_percent Int32
@@ -362,73 +336,6 @@ ORDER BY (toDate(event_time), event_time, click_id);
 CREATE MATERIALIZED VIEW IF NOT EXISTS video_vtr_events_mv TO video_vtr_events AS
 SELECT * FROM video_vtr_events_kafka;
 
--- -----------------------------------------------------------------------------
--- 7. ad_video_vtr_joined
--- -----------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS ad_video_vtr_joined_kafka
-(
-    click_id String,
-    request_id String,
-    impression_id Int32,
-    campaign_id Int32,
-    creative_id Int32,
-    advertiser_id Int32,
-    ad_event_time DateTime64(3),
-    bid Float64,
-    ecpm Float64,
-    cost Float64,
-    creative_type String,
-    bid_type String,
-    banner_width Int32,
-    banner_height Int32,
-    video_duration Int32,
-    slot_id String,
-    pctr Float64,
-    pcvr Float64,
-    landing_url String,
-    video_event_time DateTime64(3),
-    video_event_type String,
-    progress_percent Int32
-)
-ENGINE = Kafka()
-SETTINGS
-    kafka_broker_list = 'kafka:9092',
-    kafka_topic_list = 'FLINK_AD_VIDEO_VTR',
-    kafka_group_name = 'clickhouse-ad-video-vtr-consumer',
-    kafka_format = 'JSON',
-    kafka_row_delimiter = '\n';
-
-CREATE TABLE IF NOT EXISTS ad_video_vtr_joined
-(
-    click_id String,
-    request_id String,
-    impression_id Int32,
-    campaign_id Int32,
-    creative_id Int32,
-    advertiser_id Int32,
-    ad_event_time DateTime64(3),
-    bid Float64,
-    ecpm Float64,
-    cost Float64,
-    creative_type String,
-    bid_type String,
-    banner_width Int32,
-    banner_height Int32,
-    video_duration Int32,
-    slot_id String,
-    pctr Float64,
-    pcvr Float64,
-    landing_url String,
-    video_event_time DateTime64(3),
-    video_event_type String,
-    progress_percent Int32
-)
-ENGINE = MergeTree()
-ORDER BY (toDate(ad_event_time), ad_event_time, click_id);
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS ad_video_vtr_joined_mv TO ad_video_vtr_joined AS
-SELECT * FROM ad_video_vtr_joined_kafka;
 
 -- =============================================================================
 -- 8. Hourly & Daily Event Counts (Aggregated Materialized Views)
@@ -478,11 +385,11 @@ GROUP BY event_date, event_hour;
 -- Conversion 计数物化视图
 CREATE MATERIALIZED VIEW IF NOT EXISTS conversion_hourly_mv TO hourly_events_count AS
 SELECT
-    toDate(conversion_time) AS event_date,
-    toStartOfHour(conversion_time) AS event_hour,
+    toDate(event_time) AS event_date,
+    toStartOfHour(event_time) AS event_hour,
     'conversion' AS event_type,
     toUInt64(count()) AS total_count
-FROM ad_conversion_joined
+FROM conversion_events
 GROUP BY event_date, event_hour;
 
 -- =============================================================================

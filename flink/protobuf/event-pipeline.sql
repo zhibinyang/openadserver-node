@@ -1,6 +1,9 @@
 -- Flink SQL Job for Event Pipeline
 -- Kafka → Flink (JOIN) → ClickHouse
 
+-- Set state TTL to 2 hours for joins (only keep events for 2 hours to save state memory)
+SET 'table.exec.state.ttl' = '2 h';
+
 -- Add required JARs
 ADD JAR '/opt/flink/protobuf/events.jar';
 
@@ -53,6 +56,7 @@ CREATE TABLE IF NOT EXISTS ad_events_kafka (
     request_id STRING,
     impression_id INT,
     click_id STRING,
+    imp_id STRING,
     campaign_id INT,
     creative_id INT,
     advertiser_id INT,
@@ -90,6 +94,7 @@ CREATE TABLE IF NOT EXISTS ad_events_kafka (
 -- Impression Events Source
 CREATE TABLE IF NOT EXISTS impression_events_kafka (
     click_id STRING,
+    imp_id STRING,
     event_time BIGINT,
     -- Time attribute and watermark (required for temporal join)
     event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
@@ -111,6 +116,7 @@ CREATE TABLE IF NOT EXISTS impression_events_kafka (
 -- Click Events Source
 CREATE TABLE IF NOT EXISTS click_events_kafka (
     click_id STRING,
+    imp_id STRING,
     event_time BIGINT,
     -- Time attribute and watermark (required for temporal join)
     event_time_ts AS TO_TIMESTAMP_LTZ(event_time, 3),
@@ -132,6 +138,7 @@ CREATE TABLE IF NOT EXISTS click_events_kafka (
 -- Conversion Events Source
 CREATE TABLE IF NOT EXISTS conversion_events_kafka (
     click_id STRING,
+    imp_id STRING,
     event_time BIGINT,
     conversion_value DOUBLE,
     conversion_type STRING,
@@ -156,6 +163,7 @@ CREATE TABLE IF NOT EXISTS conversion_events_kafka (
 -- Video VTR Events Source
 CREATE TABLE IF NOT EXISTS video_vtr_events_kafka (
     click_id STRING,
+    imp_id STRING,
     event_time BIGINT,
     event_type STRING,
     progress_percent INT,
@@ -215,6 +223,7 @@ CREATE TABLE IF NOT EXISTS ad_events_kafka_sink (
     request_id STRING,
     impression_id INT,
     click_id STRING,
+    imp_id STRING,
     campaign_id INT,
     creative_id INT,
     advertiser_id INT,
@@ -240,6 +249,7 @@ CREATE TABLE IF NOT EXISTS ad_events_kafka_sink (
 
 -- Ad + Impression Joined Sink
 CREATE TABLE IF NOT EXISTS ad_impression_joined_kafka_sink (
+    imp_id STRING,
     click_id STRING,
     request_id STRING,
     impression_id INT,
@@ -269,6 +279,7 @@ CREATE TABLE IF NOT EXISTS ad_impression_joined_kafka_sink (
 
 -- Ad + Click Joined Sink
 CREATE TABLE IF NOT EXISTS ad_click_joined_kafka_sink (
+    imp_id STRING,
     click_id STRING,
     request_id STRING,
     impression_id INT,
@@ -296,40 +307,24 @@ CREATE TABLE IF NOT EXISTS ad_click_joined_kafka_sink (
     'format' = 'json'
 );
 
--- Ad + Conversion Joined Sink
-CREATE TABLE IF NOT EXISTS ad_conversion_joined_kafka_sink (
+-- Conversion Events Sink (raw, no join)
+CREATE TABLE IF NOT EXISTS conversion_events_kafka_sink (
     click_id STRING,
-    request_id STRING,
-    impression_id INT,
-    campaign_id INT,
-    creative_id INT,
-    advertiser_id INT,
     event_time TIMESTAMP(3),
-    bid DOUBLE,
-    ecpm DOUBLE,
-    cost DOUBLE,
-    creative_type STRING,
-    bid_type STRING,
-    banner_width INT,
-    banner_height INT,
-    video_duration INT,
-    slot_id STRING,
-    pctr DOUBLE,
-    pcvr DOUBLE,
-    landing_url STRING,
-    conversion_time TIMESTAMP(3),
     conversion_value DOUBLE,
-    conversion_type STRING
+    conversion_type STRING,
+    attributes MAP<STRING, STRING>
 ) WITH (
     'connector' = 'kafka',
-    'topic' = 'FLINK_AD_CONVERSION',
+    'topic' = 'FLINK_CONVERSION',
     'properties.bootstrap.servers' = 'kafka:9092',
     'format' = 'json'
 );
 
--- Video VTR Events Sink
+-- Video VTR Events Sink (raw, no join)
 CREATE TABLE IF NOT EXISTS video_vtr_events_kafka_sink (
     click_id STRING,
+    imp_id STRING,
     event_time TIMESTAMP(3),
     event_type STRING,
     progress_percent INT
@@ -340,36 +335,6 @@ CREATE TABLE IF NOT EXISTS video_vtr_events_kafka_sink (
     'format' = 'json'
 );
 
--- Ad + Video VTR Joined Sink
-CREATE TABLE IF NOT EXISTS ad_video_vtr_joined_kafka_sink (
-    click_id STRING,
-    request_id STRING,
-    impression_id INT,
-    campaign_id INT,
-    creative_id INT,
-    advertiser_id INT,
-    ad_event_time TIMESTAMP(3),
-    bid DOUBLE,
-    ecpm DOUBLE,
-    cost DOUBLE,
-    creative_type STRING,
-    bid_type STRING,
-    banner_width INT,
-    banner_height INT,
-    video_duration INT,
-    slot_id STRING,
-    pctr DOUBLE,
-    pcvr DOUBLE,
-    landing_url STRING,
-    video_event_time TIMESTAMP(3),
-    video_event_type STRING,
-    progress_percent INT
-) WITH (
-    'connector' = 'kafka',
-    'topic' = 'FLINK_AD_VIDEO_VTR',
-    'properties.bootstrap.servers' = 'kafka:9092',
-    'format' = 'json'
-);
 
 -- =============================================================================
 -- Streaming Jobs
@@ -409,6 +374,7 @@ SELECT
     request_id,
     impression_id,
     click_id,
+    imp_id,
     campaign_id,
     creative_id,
     advertiser_id,
@@ -428,9 +394,10 @@ SELECT
 FROM ad_events_kafka;
 
 -- Job 3: Ad + Impression JOIN → Kafka
--- Using temporal join with state retention
+-- Join key: imp_id (fallback to click_id for backward compatibility)
 INSERT INTO ad_impression_joined_kafka_sink
 SELECT
+    COALESCE(a.imp_id, a.click_id) AS imp_id,
     a.click_id,
     a.request_id,
     a.impression_id,
@@ -453,12 +420,14 @@ SELECT
     TO_TIMESTAMP_LTZ(i.event_time, 3) AS impression_time
 FROM ad_events_kafka AS a
 INNER JOIN impression_events_kafka  AS i
-ON a.click_id = i.click_id
-AND i.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '1' HOUR;
+ON COALESCE(a.imp_id, a.click_id) = COALESCE(i.imp_id, i.click_id)
+AND i.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '2' HOUR;
 
 -- Job 4: Ad + Click JOIN → Kafka
+-- Join key: imp_id (fallback to click_id for backward compatibility)
 INSERT INTO ad_click_joined_kafka_sink
 SELECT
+    COALESCE(a.imp_id, a.click_id) AS imp_id,
     a.click_id,
     a.request_id,
     a.impression_id,
@@ -481,75 +450,27 @@ SELECT
     TO_TIMESTAMP_LTZ(c.event_time, 3) AS click_time
 FROM ad_events_kafka AS a
 INNER JOIN click_events_kafka  AS c
-ON a.click_id = c.click_id
-AND c.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '1' HOUR;
+ON COALESCE(a.imp_id, a.click_id) = COALESCE(c.imp_id, c.click_id)
+AND c.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '2' HOUR;
 
--- Job 5: Ad + Conversion JOIN → Kafka
-INSERT INTO ad_conversion_joined_kafka_sink
-SELECT
-    a.click_id,
-    a.request_id,
-    a.impression_id,
-    a.campaign_id,
-    a.creative_id,
-    a.advertiser_id,
-    TO_TIMESTAMP_LTZ(a.event_time, 3) AS event_time,
-    a.bid,
-    a.ecpm,
-    a.cost,
-    a.creative_type,
-    a.bid_type,
-    a.banner_width,
-    a.banner_height,
-    a.video_duration,
-    a.slot_id,
-    a.pctr,
-    a.pcvr,
-    a.landing_url,
-    TO_TIMESTAMP_LTZ(cv.event_time, 3) AS conversion_time,
-    cv.conversion_value,
-    cv.conversion_type
-FROM ad_events_kafka AS a
-INNER JOIN conversion_events_kafka  AS cv
-ON a.click_id = cv.click_id
-AND cv.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '24' HOUR;
-
--- Job 6: Video VTR Events → Kafka
+-- Job 5: Video VTR Events → Kafka (raw, no join)
 INSERT INTO video_vtr_events_kafka_sink
 SELECT
     click_id,
+    imp_id,
     TO_TIMESTAMP_LTZ(event_time, 3) AS event_time,
     event_type,
     progress_percent
 FROM video_vtr_events_kafka;
 
--- Job 7: Ad + Video VTR JOIN → Kafka
-INSERT INTO ad_video_vtr_joined_kafka_sink
+-- Job 6: Conversion Events → Kafka (raw, no join)
+-- Conversion events only have click_id, no imp_id (consistent with existing logic)
+INSERT INTO conversion_events_kafka_sink
 SELECT
-    a.click_id,
-    a.request_id,
-    a.impression_id,
-    a.campaign_id,
-    a.creative_id,
-    a.advertiser_id,
-    TO_TIMESTAMP_LTZ(a.event_time, 3) AS ad_event_time,
-    a.bid,
-    a.ecpm,
-    a.cost,
-    a.creative_type,
-    a.bid_type,
-    a.banner_width,
-    a.banner_height,
-    a.video_duration,
-    a.slot_id,
-    a.pctr,
-    a.pcvr,
-    a.landing_url,
-    TO_TIMESTAMP_LTZ(v.event_time, 3) AS video_event_time,
-    v.event_type,
-    v.progress_percent
-FROM ad_events_kafka AS a
-INNER JOIN video_vtr_events_kafka  AS v
-ON a.click_id = v.click_id
-AND v.event_time_ts BETWEEN a.event_time_ts AND a.event_time_ts + INTERVAL '1' HOUR;
+    click_id,
+    TO_TIMESTAMP_LTZ(event_time, 3) AS event_time,
+    conversion_value,
+    conversion_type,
+    attributes
+FROM conversion_events_kafka;
 END;
