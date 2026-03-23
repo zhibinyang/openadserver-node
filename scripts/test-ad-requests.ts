@@ -30,8 +30,14 @@ interface Campaign {
     pacing_type: number;
 }
 
-interface TargetingRule {
+interface AdGroup {
+    id: number;
     campaign_id: number;
+    name: string;
+}
+
+interface TargetingRule {
+    ad_group_id: number;
     rule_type: string;
     rule_value: any;
     is_include: boolean;
@@ -183,8 +189,15 @@ async function postVastRequest(params: any): Promise<string> {
 /**
  * Determine the best test context for a campaign based on its targeting rules
  */
-function getTestContextForCampaign(rules: TargetingRule[], campaignId: number): any {
-    const campaignRules = rules.filter(r => r.campaign_id === campaignId);
+function getTestContextForCampaign(rules: TargetingRule[], campaignId: number, adGroupByCampaignId: Map<number, AdGroup>): any {
+    // Get ad group for this campaign
+    const adGroup = adGroupByCampaignId.get(campaignId);
+    if (!adGroup) {
+        // No ad group - use generic user
+        return TEST_CONTEXTS.generic_user;
+    }
+
+    const campaignRules = rules.filter(r => r.ad_group_id === adGroup.id);
 
     if (campaignRules.length === 0) {
         // No targeting rules - use generic user
@@ -238,6 +251,7 @@ function getTestContextForCampaign(rules: TargetingRule[], campaignId: number): 
  */
 function buildRequestParams(creative: Creative, context: any): any {
     const params: any = {
+        app_id: 'com.game.moba', // Test app ID
         slot_id: `test_slot_${creative.id}`,
         slot_type: creative.creative_type,
         slot_width: creative.width,
@@ -281,10 +295,20 @@ async function main() {
     const campaignMap = new Map(campaigns.map(c => [c.id, c]));
     console.log(`Found ${campaigns.length} active campaigns\n`);
 
-    // 3. Fetch targeting rules
+    // 3. Fetch ad groups
+    console.log('Fetching ad groups...');
+    const adGroups = await fetchFromDB<AdGroup>(`
+        SELECT id, campaign_id, name
+        FROM ad_groups
+        WHERE status = 1
+    `);
+    const adGroupByCampaignId = new Map(adGroups.map(ag => [ag.campaign_id, ag]));
+    console.log(`Found ${adGroups.length} active ad groups\n`);
+
+    // 4. Fetch targeting rules
     console.log('Fetching targeting rules...');
     const rules = await fetchFromDB<TargetingRule>(`
-        SELECT campaign_id, rule_type, rule_value, is_include
+        SELECT ad_group_id, rule_type, rule_value, is_include
         FROM targeting_rules
     `);
     console.log(`Found ${rules.length} targeting rules\n`);
@@ -304,7 +328,7 @@ async function main() {
             continue;
         }
 
-        const context = getTestContextForCampaign(rules, creative.campaign_id);
+        const context = getTestContextForCampaign(rules, creative.campaign_id, adGroupByCampaignId);
         const params = buildRequestParams(creative, context);
 
         const result: TestResult = {
@@ -373,7 +397,7 @@ async function main() {
         if (!campaign) continue;
 
         const campaignVideoCreatives = videoCreatives.filter(c => c.campaign_id === campaignId);
-        const context = getTestContextForCampaign(rules, campaignId);
+        const context = getTestContextForCampaign(rules, campaignId, adGroupByCampaignId);
         const params = buildRequestParams(campaignVideoCreatives[0], context);
 
         try {

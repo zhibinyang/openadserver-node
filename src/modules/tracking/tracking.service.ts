@@ -130,28 +130,7 @@ export class TrackingService {
         // 2. Send to new event pipeline (Kafka/LevelDB)
         await this.sendToEventPipeline(dto, clickId, eventTime, cost);
 
-        // 3. Persist to DB (Postgres and/or BigQuery) via AnalyticsService (legacy, can be removed later)
-        this.analyticsService.trackEvent({
-            request_id: requestId,
-            click_id: clickId,
-            campaign_id: campaignId,
-            creative_id: creativeId,
-            user_id: userId,
-            event_type: eventType,
-            event_time: eventTime,
-            cost: cost,
-            ip: ip,
-            country: country,
-            city: city,
-            device: device,
-            os: os,
-            browser: browser,
-            bid: bid,
-            price: cost,
-            conversion_value: dto.conversion_value ? parseFloat(dto.conversion_value) : null,
-            pctr: pctr,
-            pcvr: pcvr,
-        });
+        // Legacy Postgres/BigQuery persistence removed - only Kafka pipeline is used
 
         // 4. Update Redis Counters
         // We cannot update budget/freq without campaign_id/user_id.

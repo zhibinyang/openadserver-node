@@ -89,11 +89,26 @@ export class EngineController {
         const eventTime = Date.now();
 
         // Produce RequestEvent
+        // Get app category if app_id is present
+        let appCategory: string | undefined;
+        if (context.app_id) {
+            // Try to find app by bundle_id (context.app_id is bundle_id)
+            // TODO: Add cache index by bundle_id for faster lookup
+            const app = Array.from(this.cacheService['apps'].values()).find(a => a.bundle_id === context.app_id);
+            if (app?.category_id) {
+                // Get category from cache
+                // TODO: Add app categories cache
+                appCategory = String(app.category_id);
+            }
+        }
+
         const requestEvent: RequestEvent = {
             requestId,
             eventTime,
             userIds: context.internal_uid ? { userId: context.internal_uid } : undefined,
             segments: context.segment_ids?.map(String),
+            appId: context.app_id,
+            appCategory, // New: add app category
             slotId: context.slot_id,
             slotType: this.toSlotType(context.slot_type),
             ip: context.ip,
@@ -116,11 +131,26 @@ export class EngineController {
 
         // Produce AdEvent for each candidate
         for (const c of candidates) {
+            // Get marketing goal from ad group
+            let marketingGoal: number | undefined;
+            if (c.ad_group_id) {
+                const adGroup = this.cacheService.getAdGroup(c.ad_group_id);
+                marketingGoal = adGroup?.marketing_goal ?? undefined;
+            }
+
+            // Get ad category from creative
+            let adCategory: string | undefined;
+            const creative = this.cacheService.getCreativesForCampaign(c.campaign_id).find(cr => cr.id === c.creative_id);
+            if (creative?.ad_category_id) {
+                adCategory = String(creative.ad_category_id);
+            }
+
             const adEvent: AdEvent = {
                 requestId,
                 impressionId: c.impression_id ?? 0,
                 clickId: c.click_id!,
                 campaignId: c.campaign_id,
+                adGroupId: c.ad_group_id,
                 creativeId: c.creative_id,
                 advertiserId: c.advertiser_id,
                 eventTime,
@@ -129,6 +159,8 @@ export class EngineController {
                 cost: c.bid_type === 1 ? (c.actual_cost ?? c.bid ?? 0) / 1000 : (c.actual_cost ?? c.bid ?? 0),
                 bidType: this.toEventBidType(c.bid_type),
                 creativeType: this.toEventCreativeType(c.creative_type),
+                marketingGoal, // New: add marketing goal
+                adCategory, // New: add ad category
                 bannerWidth: context.slot_width ?? c.width,
                 bannerHeight: context.slot_height ?? c.height,
                 videoDuration: c.duration ?? c.metadata?.video_duration,
@@ -156,50 +188,9 @@ export class EngineController {
         // Log winning campaign's current budget and spend asynchronously
         this.logWinningCampaignPacing(candidates).catch(e => this.logger.warn(e));
 
-        // Access AnalyticsService from module ref or inject it? Best to inject.
-        // But for now, let's assume valid candidates are "Impressions" or at least "Bids".
-        // Actually, "Impression" happens on the client.
-        // Server-side, we log the "Decision" (Bid).
-        // User asked for "Click Event -> BQ".
-        // If we want pCTR training data, we need negatives (Impressions that didn't click).
-        // So we should log the "Impression" here with label=0.
-        // But wait, the client loads the ad -> Impression.
-        // If we log here, we log "Bid Response".
-        // Let's log it as EventType.IMPRESSION for now, effectively "Bid".
-
         candidates.forEach(c => {
             // Generate click_id here so we can log it with the request
             c.click_id = randomUUID();
-
-            this.analyticsService.trackEvent({
-                request_id: requestId,
-                click_id: c.click_id,
-                campaign_id: c.campaign_id,
-                creative_id: c.creative_id,
-                user_id: context.user_id,
-                device: context.device,
-                browser: context.browser,
-                event_type: EventType.REQUEST,
-                event_time: Date.now(),
-                cost: 0,
-                ip: context.ip,
-                country: context.country,
-                city: context.city,
-                bid: c.bid,
-                price: c.actual_cost ?? c.bid,
-                os: context.os,
-                referer: context.referer,
-                slot_type: context.slot_type,
-                slot_id: context.slot_id,
-                banner_width: context.slot_width || c.width || null,
-                banner_height: context.slot_height || c.height || null,
-                video_duration: c.duration || c.metadata?.video_duration || null,
-                bid_type: c.bid_type,
-                ecpm: c.ecpm || null,
-                page_context: context.page_context || null,
-                pctr: c.pctr || null,
-                pcvr: c.pcvr || null,
-            });
         });
 
         // Produce events to Kafka pipeline (fire and forget)
@@ -226,38 +217,8 @@ export class EngineController {
         // Log winning campaign's current budget and spend asynchronously
         this.logWinningCampaignPacing(candidates).catch(e => this.logger.warn(e));
 
-        // Log REQUEST event for each candidate (same as /ad/get)
         candidates.forEach(c => {
             c.click_id = randomUUID();
-            this.analyticsService.trackEvent({
-                request_id: requestId,
-                click_id: c.click_id,
-                campaign_id: c.campaign_id,
-                creative_id: c.creative_id,
-                user_id: context.user_id,
-                device: context.device,
-                browser: context.browser,
-                event_type: EventType.REQUEST,
-                event_time: Date.now(),
-                cost: 0,
-                ip: context.ip,
-                country: context.country,
-                city: context.city,
-                bid: c.bid,
-                price: c.actual_cost ?? c.bid,
-                os: context.os,
-                referer: context.referer,
-                slot_type: context.slot_type,
-                slot_id: context.slot_id,
-                banner_width: context.slot_width || c.width || null,
-                banner_height: context.slot_height || c.height || null,
-                video_duration: c.duration || c.metadata?.video_duration || null,
-                bid_type: c.bid_type,
-                ecpm: c.ecpm || null,
-                page_context: context.page_context || null,
-                pctr: c.pctr || null,
-                pcvr: c.pcvr || null,
-            });
         });
 
         // Produce events to Kafka pipeline (fire and forget)
@@ -558,35 +519,8 @@ export class EngineController {
 
         const candidates = await this.adEngine.recommend(context, body.slot_id || 'geo');
 
-        // Log as IMPRESSION (reusing existing event type)
         candidates.forEach(c => {
             c.click_id = randomUUID();
-            this.analyticsService.trackEvent({
-                request_id: requestId,
-                click_id: c.click_id,
-                campaign_id: c.campaign_id,
-                creative_id: c.creative_id,
-                user_id: context.user_id,
-                device: context.device,
-                browser: context.browser,
-                event_type: EventType.IMPRESSION,
-                event_time: Date.now(),
-                cost: 0,
-                ip: context.ip,
-                country: context.country,
-                city: context.city,
-                bid: c.bid,
-                price: c.actual_cost ?? c.bid,
-                os: context.os,
-                referer: context.referer,
-                slot_type: context.slot_type,
-                slot_id: context.slot_id || 'geo',
-                bid_type: c.bid_type,
-                ecpm: c.ecpm || null,
-                page_context: context.page_context || body.query,
-                pctr: c.pctr || null,
-                pcvr: c.pcvr || null,
-            });
         });
 
         // Produce events to Kafka pipeline (fire and forget)

@@ -13,7 +13,7 @@ import {
     primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { Status, BidType, PacingType, CreativeType, EventType } from '../shared/types';
+import { Status, BidType, PacingType, CreativeType, EventType, IABCategory, SlotType, MarketingGoal } from '../shared/types';
 
 // --- ADVERTISERS ---
 export const advertisers = pgTable('advertisers', {
@@ -51,7 +51,7 @@ export const campaigns = pgTable('campaigns', {
 
     // Bidding
     bid_type: integer('bid_type').default(BidType.CPM),
-    bid_amount: numeric('bid_amount', { precision: 12, scale: 4 }).default('0'),
+    bid_amount: numeric('bid_amount', { precision: 12, scale: 4 }).default('0'), // For GEO and legacy
     pacing_type: integer('pacing_type').default(PacingType.EVEN),
 
     // Frequency cap
@@ -81,6 +81,7 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
         references: [advertisers.id],
     }),
     creatives: many(creatives),
+    ad_groups: many(ad_groups),
     targeting_rules: many(targeting_rules),
 }));
 
@@ -90,6 +91,11 @@ export const creatives = pgTable('creatives', {
     campaign_id: integer('campaign_id')
         .notNull()
         .references(() => campaigns.id),
+    ad_group_id: integer('ad_group_id')
+        .references(() => ad_groups.id), // New: optional ad group association
+    ad_category_id: integer('ad_category_id')
+        .references(() => app_categories.id), // New: optional ad category
+
     title: varchar('title', { length: 255 }).notNull(),
     description: text('description'),
     image_url: varchar('image_url', { length: 1024 }),
@@ -102,6 +108,10 @@ export const creatives = pgTable('creatives', {
     height: integer('height').default(0),
     duration: integer('duration'), // Video duration in seconds
 
+    // Frequency cap
+    freq_cap_daily: integer('freq_cap_daily').default(10),
+    freq_cap_hourly: integer('freq_cap_hourly').default(3),
+
     // Status
     status: integer('status').default(Status.ACTIVE),
 
@@ -112,19 +122,29 @@ export const creatives = pgTable('creatives', {
     updated_at: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const creativesRelations = relations(creatives, ({ one }) => ({
+export const creativesRelations = relations(creatives, ({ one, many }) => ({
     campaign: one(campaigns, {
         fields: [creatives.campaign_id],
         references: [campaigns.id],
     }),
+    ad_group: one(ad_groups, {
+        fields: [creatives.ad_group_id],
+        references: [ad_groups.id],
+    }),
+    ad_category: one(app_categories, {
+        fields: [creatives.ad_category_id],
+        references: [app_categories.id],
+    }),
+    creative_renditions: many(creative_renditions),
 }));
 
 // --- TARGETING RULES ---
 export const targeting_rules = pgTable('targeting_rules', {
     id: serial('id').primaryKey(),
-    campaign_id: integer('campaign_id')
+    ad_group_id: integer('ad_group_id')
         .notNull()
-        .references(() => campaigns.id),
+        .references(() => ad_groups.id), // Targeting rules are only bound to ad groups
+
     // Rule type: geo, device, age, gender, etc.
     rule_type: varchar('rule_type', { length: 50 }).notNull(),
     // JSON rule value
@@ -137,9 +157,9 @@ export const targeting_rules = pgTable('targeting_rules', {
 });
 
 export const targetingRulesRelations = relations(targeting_rules, ({ one }) => ({
-    campaign: one(campaigns, {
-        fields: [targeting_rules.campaign_id],
-        references: [campaigns.id],
+    ad_group: one(ad_groups, {
+        fields: [targeting_rules.ad_group_id],
+        references: [ad_groups.id],
     }),
 }));
 
@@ -194,6 +214,117 @@ export const audience_interests = pgTable('audience_interests', {
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// --- IAB APP CATEGORIES ---
+export const app_categories = pgTable('app_categories', {
+    id: serial('id').primaryKey(),
+    code: varchar('code', { length: 20 }).notNull().unique(), // IAB category code (e.g. 'IAB1')
+    name: varchar('name', { length: 255 }).notNull(), // Category name
+    description: text('description'),
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// --- APPS (Supply Side) ---
+export const apps = pgTable('apps', {
+    id: serial('id').primaryKey(),
+    bundle_id: varchar('bundle_id', { length: 255 }).notNull().unique(), // App bundle/package ID
+    name: varchar('name', { length: 255 }).notNull(), // App name
+    category_id: integer('category_id')
+        .references(() => app_categories.id), // IAB category
+    publisher_id: integer('publisher_id'), // Publisher ID (future use)
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const appsRelations = relations(apps, ({ one, many }) => ({
+    category: one(app_categories, {
+        fields: [apps.category_id],
+        references: [app_categories.id],
+    }),
+    slots: many(slots),
+}));
+
+// --- AD SLOTS (Supply Side) ---
+export const slots = pgTable('slots', {
+    id: serial('id').primaryKey(),
+    app_id: integer('app_id')
+        .notNull()
+        .references(() => apps.id),
+    slot_type: integer('slot_type').default(SlotType.BANNER),
+    width: integer('width').default(0),
+    height: integer('height').default(0),
+    description: text('description'),
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const slotsRelations = relations(slots, ({ one }) => ({
+    app: one(apps, {
+        fields: [slots.app_id],
+        references: [apps.id],
+    }),
+}));
+
+// --- AD GROUPS (Demand Side) ---
+export const ad_groups = pgTable('ad_groups', {
+    id: serial('id').primaryKey(),
+    campaign_id: integer('campaign_id')
+        .notNull()
+        .references(() => campaigns.id),
+    name: varchar('name', { length: 255 }).notNull(),
+    marketing_goal: integer('marketing_goal').default(MarketingGoal.PERFORMANCE),
+    bid_amount: numeric('bid_amount', { precision: 12, scale: 4 }).default('0'),
+
+    // Frequency cap
+    freq_cap_daily: integer('freq_cap_daily').default(10),
+    freq_cap_hourly: integer('freq_cap_hourly').default(3),
+
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const adGroupsRelations = relations(ad_groups, ({ one, many }) => ({
+    campaign: one(campaigns, {
+        fields: [ad_groups.campaign_id],
+        references: [campaigns.id],
+    }),
+    creatives: many(creatives),
+    targeting_rules: many(targeting_rules),
+    creative_renditions: many(creative_renditions),
+}));
+
+// --- CREATIVE RENDITIONS (Physical Material Files) ---
+export const creative_renditions = pgTable('creative_renditions', {
+    id: serial('id').primaryKey(),
+    creative_id: integer('creative_id')
+        .notNull()
+        .references(() => creatives.id),
+    slot_type: integer('slot_type').default(SlotType.BANNER),
+    width: integer('width').default(0),
+    height: integer('height').default(0),
+    file_url: varchar('file_url', { length: 1024 }).notNull(),
+    duration: integer('duration'), // Video duration in seconds
+    status: integer('status').default(Status.ACTIVE),
+
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const creativeRenditionsRelations = relations(creative_renditions, ({ one }) => ({
+    creative: one(creatives, {
+        fields: [creative_renditions.creative_id],
+        references: [creatives.id],
+    }),
+}));
 
 // --- AD EVENTS ---
 export const ad_events = pgTable('ad_events', {

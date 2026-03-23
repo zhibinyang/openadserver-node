@@ -20,22 +20,65 @@ export class FilterService implements PipelineStep {
     ): Promise<AdCandidate[]> {
         if (candidates.length === 0) return [];
 
-        // 0. Filter by slot_type (creative_type must match)
-        if (context.slot_type) {
+        // 0. Filter by slot_type and dimensions (support creative renditions)
+        if (context.slot_type || (context.slot_width && context.slot_height)) {
             const before = candidates.length;
-            candidates = candidates.filter(c => c.creative_type === context.slot_type);
-            if (candidates.length < before) {
-                this.logger.log(`Slot type filter: ${before} -> ${candidates.length} (slot_type=${context.slot_type})`);
-            }
-            if (candidates.length === 0) return [];
-        }
+            const filtered: AdCandidate[] = [];
 
-        // 0.5 Filter by dimensions (width & height must match if provided)
-        if (context.slot_width && context.slot_height) {
-            const before = candidates.length;
-            candidates = candidates.filter(c => c.width === context.slot_width && c.height === context.slot_height);
+            for (const candidate of candidates) {
+                // Check if creative has renditions
+                const renditions = this.cacheService.getCreativeRenditionsForCreative(candidate.creative_id);
+
+                let matches = false;
+                if (renditions.length > 0) {
+                    // New mode: match against creative renditions
+                    for (const rendition of renditions) {
+                        let typeMatch = true;
+                        let dimensionMatch = true;
+
+                        if (context.slot_type) {
+                            typeMatch = rendition.slot_type === context.slot_type;
+                        }
+                        if (context.slot_width && context.slot_height) {
+                            dimensionMatch = rendition.width === context.slot_width && rendition.height === context.slot_height;
+                        }
+
+                        if (typeMatch && dimensionMatch) {
+                            // Update candidate with rendition's dimensions and file URL
+                            candidate.width = rendition.width || 0;
+                            candidate.height = rendition.height || 0;
+                            candidate.duration = rendition.duration || 0;
+                            if (rendition.slot_type === 3) { // Video
+                                candidate.video_url = rendition.file_url;
+                            } else {
+                                candidate.image_url = rendition.file_url;
+                            }
+                            matches = true;
+                            break;
+                        }
+                    }
+                } else {
+                    // Legacy mode: match against creative's own fields
+                    let typeMatch = true;
+                    let dimensionMatch = true;
+
+                    if (context.slot_type) {
+                        typeMatch = candidate.creative_type === context.slot_type;
+                    }
+                    if (context.slot_width && context.slot_height) {
+                        dimensionMatch = candidate.width === context.slot_width && candidate.height === context.slot_height;
+                    }
+                    matches = typeMatch && dimensionMatch;
+                }
+
+                if (matches) {
+                    filtered.push(candidate);
+                }
+            }
+
+            candidates = filtered;
             if (candidates.length < before) {
-                this.logger.log(`Dimension filter: ${before} -> ${candidates.length} (requested ${context.slot_width}x${context.slot_height})`);
+                this.logger.log(`Slot matching filter: ${before} -> ${candidates.length}`);
             }
             if (candidates.length === 0) return [];
         }
@@ -183,6 +226,7 @@ export class FilterService implements PipelineStep {
 
     /**
      * Batch check frequency caps for all candidates using Redis pipeline.
+     * Supports 3-level frequency checking: Campaign → Ad Group → Creative
      * Returns array of booleans indicating if each candidate is frequency-capped.
      */
     private async batchCheckFrequency(candidates: AdCandidate[], userId?: string): Promise<boolean[]> {
@@ -191,15 +235,40 @@ export class FilterService implements PipelineStep {
         }
 
         const pipeline = this.redisService.client.pipeline();
-        const campaignLimits: number[] = [];
+        const frequencyInfo: Array<{
+            campaignLimit: number;
+            adGroupLimit: number;
+            creativeLimit: number;
+        }> = [];
 
         for (const candidate of candidates) {
             const campaign = this.cacheService.getCampaign(candidate.campaign_id);
-            const limit = campaign?.freq_cap_daily || 0;
-            campaignLimits.push(limit);
+            const adGroup = candidate.ad_group_id ? this.cacheService.getAdGroup(candidate.ad_group_id) : undefined;
+            const creative = this.cacheService.getCreativesForCampaign(candidate.campaign_id)?.find(c => c.id === candidate.creative_id);
 
-            if (limit > 0) {
-                const key = `freq:${userId}:${candidate.campaign_id}`;
+            const campaignLimit = campaign?.freq_cap_daily || 0;
+            const adGroupLimit = adGroup?.freq_cap_daily || 0;
+            const creativeLimit = creative?.freq_cap_daily || 0;
+
+            frequencyInfo.push({ campaignLimit, adGroupLimit, creativeLimit });
+
+            // Add all required queries to pipeline
+            if (campaignLimit > 0) {
+                const key = `freq:${userId}:campaign:${candidate.campaign_id}`;
+                pipeline.get(key);
+            } else {
+                pipeline.get('__dummy__');
+            }
+
+            if (adGroupLimit > 0 && candidate.ad_group_id) {
+                const key = `freq:${userId}:adgroup:${candidate.ad_group_id}`;
+                pipeline.get(key);
+            } else {
+                pipeline.get('__dummy__');
+            }
+
+            if (creativeLimit > 0) {
+                const key = `freq:${userId}:creative:${candidate.creative_id}`;
                 pipeline.get(key);
             } else {
                 pipeline.get('__dummy__');
@@ -212,7 +281,6 @@ export class FilterService implements PipelineStep {
         for (let i = 0; i < candidates.length; i++) {
             const candidate = candidates[i];
             const campaign = this.cacheService.getCampaign(candidate.campaign_id);
-            // @ts-ignore
             const pacingType = campaign?.pacing_type || 1;
 
             // EVER_GREEN ignores frequency caps
@@ -221,21 +289,43 @@ export class FilterService implements PipelineStep {
                 continue;
             }
 
-            const limit = campaignLimits[i];
-            if (limit <= 0) {
-                capped.push(false);
-                continue;
+            const { campaignLimit, adGroupLimit, creativeLimit } = frequencyInfo[i];
+            let isCapped = false;
+
+            // Check Campaign level cap
+            if (campaignLimit > 0) {
+                const [err, value] = results![i * 3];
+                if (!err && value) {
+                    const count = parseInt(value as string, 10);
+                    if (count >= campaignLimit) {
+                        isCapped = true;
+                    }
+                }
             }
 
-            const [err, value] = results![i];
-            if (err) {
-                this.logger.warn(`Redis error checking frequency: ${err}`);
-                capped.push(false);
-                continue;
+            // Check Ad Group level cap if not already capped
+            if (!isCapped && adGroupLimit > 0 && candidate.ad_group_id) {
+                const [err, value] = results![i * 3 + 1];
+                if (!err && value) {
+                    const count = parseInt(value as string, 10);
+                    if (count >= adGroupLimit) {
+                        isCapped = true;
+                    }
+                }
             }
 
-            const count = value ? parseInt(value as string, 10) : 0;
-            capped.push(count >= limit);
+            // Check Creative level cap if not already capped
+            if (!isCapped && creativeLimit > 0) {
+                const [err, value] = results![i * 3 + 2];
+                if (!err && value) {
+                    const count = parseInt(value as string, 10);
+                    if (count >= creativeLimit) {
+                        isCapped = true;
+                    }
+                }
+            }
+
+            capped.push(isCapped);
         }
 
         return capped;

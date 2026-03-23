@@ -61,7 +61,8 @@
       "Bash(for topic:*)",
       "Bash(do echo:*)",
       "Bash(echo \"SELECT ''''request_events'''' as table, COUNT\\(*\\) as cnt FROM request_events:*)",
-      "Bash(echo \":*)"
+      "Bash(echo \":*)",
+      "Bash(npx ts-node:*)"
     ]
   }
 }

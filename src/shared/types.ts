@@ -43,6 +43,43 @@ export enum CreativeType {
 }
 
 /**
+ * IAB Content Category enum (core 6 categories)
+ * Reference: https://iabtechlab.com/standards/content-taxonomy/
+ */
+export enum IABCategory {
+    IAB1 = 1, // Arts & Entertainment
+    IAB2 = 2, // Automotive
+    IAB3 = 3, // Business
+    IAB4 = 4, // Education
+    IAB5 = 5, // Health & Fitness
+    IAB6 = 6, // Technology & Computing
+}
+
+/**
+ * Ad Slot Type enum
+ * Maps to CreativeType for backward compatibility
+ */
+export enum SlotType {
+    BANNER = 1,    // Matches CreativeType.BANNER
+    NATIVE = 2,    // Matches CreativeType.NATIVE
+    VIDEO = 3,     // Matches CreativeType.VIDEO
+    INTERSTITIAL = 4, // Matches CreativeType.INTERSTITIAL
+    REWARDED = 5,  // Rewarded video
+    SPLASH = 6,    // App open/splash ad
+}
+
+/**
+ * Marketing Goal enum for Ad Groups
+ */
+export enum MarketingGoal {
+    BRAND_AWARENESS = 1, // Brand exposure, maximize impressions
+    PERFORMANCE = 2,     // Performance marketing, maximize clicks/conversions
+    APP_INSTALL = 3,     // Drive app installs
+    LEAD_GENERATION = 4, // Generate leads
+    SALES = 5,           // Drive product sales
+}
+
+/**
  * Event type enum.
  */
 export enum EventType {
@@ -97,6 +134,7 @@ export enum TargetingRuleType {
 export interface AdCandidate {
     campaign_id: number;
     creative_id: number;
+    ad_group_id?: number; // New: for ad group mode
     advertiser_id: number;
     bid: number;
     bid_type: BidType;

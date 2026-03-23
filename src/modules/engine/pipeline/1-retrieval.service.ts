@@ -34,30 +34,42 @@ export class RetrievalService implements PipelineStep {
             if (campaign.start_time && new Date(campaign.start_time) > now) continue;
             if (campaign.end_time && new Date(campaign.end_time) < now) continue;
 
-            // 2. Check Targeting Rules
-            const rules = this.cacheService.getRulesForCampaign(campaign.id);
-            if (!await this.targetingMatcher.match(rules, context)) {
-                continue;
-            }
+            // Get all ad groups for this campaign
+            const adGroups = this.cacheService.getAdGroupsForCampaign(campaign.id);
+            for (const adGroup of adGroups) {
+                // Check targeting rules at ad group level
+                const rules = this.cacheService.getRulesForAdGroup(adGroup.id);
+                if (!await this.targetingMatcher.match(rules, context)) {
+                    continue;
+                }
 
-            // 3. Create Candidate
-            result.push({
-                campaign_id: campaign.id,
-                creative_id: creative.id,
-                advertiser_id: campaign.advertiser_id,
-                bid: parseFloat(campaign.bid_amount || '0'), // inherited from campaign
-                bid_type: (campaign.bid_type as number) as BidType,
-                creative_type: (creative.creative_type as number) as CreativeType,
-                title: creative.title,
-                description: creative.description || undefined,
-                image_url: creative.image_url || undefined,
-                video_url: creative.video_url || undefined,
-                landing_url: creative.landing_url,
-                width: creative.width || 0,
-                height: creative.height || 0,
-                duration: creative.duration || 0,
-                metadata: {},
-            });
+                // Only include creatives that belong to this ad group
+                if (creative.ad_group_id !== adGroup.id) {
+                    continue;
+                }
+
+                // Create candidate with ad group bid
+                result.push({
+                    campaign_id: campaign.id,
+                    creative_id: creative.id,
+                    ad_group_id: adGroup.id,
+                    advertiser_id: campaign.advertiser_id,
+                    bid: parseFloat(adGroup.bid_amount || '0'), // Bid from ad group
+                    bid_type: (campaign.bid_type as number) as BidType,
+                    creative_type: (creative.creative_type as number) as CreativeType,
+                    title: creative.title,
+                    description: creative.description || undefined,
+                    image_url: creative.image_url || undefined,
+                    video_url: creative.video_url || undefined,
+                    landing_url: creative.landing_url,
+                    width: creative.width || 0,
+                    height: creative.height || 0,
+                    duration: creative.duration || 0,
+                    metadata: {
+                        ad_group_id: adGroup.id,
+                    },
+                });
+            }
         }
 
         return result;

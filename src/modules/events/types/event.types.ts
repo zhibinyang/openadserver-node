@@ -77,6 +77,8 @@ export interface RequestEvent {
   eventTime: number;
   userIds?: UserIdentity;
   segments?: string[];
+  appId?: string; // App ID
+  appCategory?: string; // New: App IAB category (for ML features)
   slotId?: string;
   slotType: SlotType;
   ip?: string;
@@ -100,6 +102,7 @@ export interface AdEvent {
   impressionId: number;
   clickId: string;
   campaignId: number;
+  adGroupId?: number; // Ad Group ID
   creativeId: number;
   advertiserId: number;
   eventTime: number;
@@ -108,6 +111,8 @@ export interface AdEvent {
   cost: number;
   bidType: BidType;
   creativeType: CreativeType;
+  marketingGoal?: number; // New: Ad group marketing goal (for ML features)
+  adCategory?: string; // New: Ad IAB category (for ML features)
   bannerWidth?: number;
   bannerHeight?: number;
   videoDuration?: number;
