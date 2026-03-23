@@ -56,21 +56,27 @@ export class CalibrationService {
     async getCalibratedPredictions(campaignId: number, slotId: string, pctr: number, pcvr: number): Promise<{ pctr: number, pcvr: number, ctr_factor: number, cvr_factor: number }> {
         if (!campaignId || !slotId) return { pctr, pcvr, ctr_factor: 1, cvr_factor: 1 };
 
-        // Global mode: read single global key from Flink calculation
+        // Global mode: read separate CTR and CVR calibration keys from Flink calculation
         if (this.calibrationMode === 'global') {
             try {
-                const globalKey = `calib:global:${campaignId}:${slotId}`;
-                const data = await this.redisService.get(globalKey);
-                if (data) {
-                    const { ctr_factor, cvr_factor } = JSON.parse(data);
-                    return {
-                        pctr: pctr * (ctr_factor ?? 1),
-                        pcvr: pcvr * (cvr_factor ?? 1),
-                        ctr_factor: ctr_factor ?? 1,
-                        cvr_factor: cvr_factor ?? 1
-                    };
-                }
-                return { pctr, pcvr, ctr_factor: 1, cvr_factor: 1 };
+                const ctrKey = `calib:global:ctr:${campaignId}:${slotId}`;
+                const cvrKey = `calib:global:cvr:${campaignId}:${slotId}`;
+
+                // Use pipeline to read both keys in single round trip
+                const pipeline = this.redisService.client.pipeline();
+                pipeline.get(ctrKey);
+                pipeline.get(cvrKey);
+                const results = await pipeline.exec();
+
+                const ctr_factor = results?.[0]?.[1] ? parseFloat(results[0][1] as string) : 1;
+                const cvr_factor = results?.[1]?.[1] ? parseFloat(results[1][1] as string) : 1;
+
+                return {
+                    pctr: pctr * ctr_factor,
+                    pcvr: pcvr * cvr_factor,
+                    ctr_factor,
+                    cvr_factor
+                };
             } catch (error) {
                 this.logger.warn(`Failed to fetch global calibration data for campaign ${campaignId}: ${error}`);
                 return { pctr, pcvr, ctr_factor: 1, cvr_factor: 1 };
