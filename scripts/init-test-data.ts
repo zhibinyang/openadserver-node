@@ -270,7 +270,11 @@ async function initDatabase() {
 
     console.log('Cleaning up existing data...');
     // Order matters for FK constraints
-    await db.execute(sql`TRUNCATE TABLE hourly_stats, ad_events, targeting_rules, creatives, campaigns, advertisers, audience_interests, geo_knowledge RESTART IDENTITY CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE
+        hourly_stats, ad_events, targeting_rules, creative_renditions, creatives,
+        ad_groups, campaigns, advertisers, audience_interests, geo_knowledge,
+        slots, apps, app_categories
+        RESTART IDENTITY CASCADE`);
 
     // Seed audience interests first (reference data)
     await seedInterests(db);
@@ -460,7 +464,57 @@ async function initDatabase() {
 
     console.log(`  Inserted ${insertedAdGroups.length} ad groups`);
 
-    // 3. Creatives - covering all CreativeTypes (BANNER=1, NATIVE=2, VIDEO=3, INTERSTITIAL=4)
+    // 3. Supply Side test data: IAB Categories, Apps, Slots (insert before creatives for foreign key)
+    console.log('\nInserting supply side test data...');
+
+    // Insert IAB Categories
+    const iabCategories = [
+        { code: 'IAB1', name: 'Arts & Entertainment', description: 'Movies, music, games, books' },
+        { code: 'IAB2', name: 'Automotive', description: 'Cars, trucks, motorcycles, auto parts' },
+        { code: 'IAB3', name: 'Business', description: 'Finance, marketing, human resources' },
+        { code: 'IAB4', name: 'Education', description: 'Colleges, online courses, textbooks' },
+        { code: 'IAB5', name: 'Health & Fitness', description: 'Diet, exercise, medical advice' },
+        { code: 'IAB6', name: 'Technology & Computing', description: 'Software, hardware, consumer electronics' },
+    ];
+    await db.insert(schema.app_categories).values(iabCategories.map(cat => ({
+        ...cat,
+        status: Status.ACTIVE,
+    })));
+    console.log(`  Inserted ${iabCategories.length} IAB categories`);
+
+    // Insert Test Apps
+    const appsData = [
+        { bundle_id: 'com.game.moba', name: 'MOBA Legends', category_id: 1 }, // Entertainment
+        { bundle_id: 'com.shop.ecommerce', name: 'Super Shop', category_id: 3 }, // Business
+        { bundle_id: 'com.social.media', name: 'Social Connect', category_id: 1 }, // Entertainment
+        { bundle_id: 'com.news.daily', name: 'Daily News', category_id: 6 }, // Technology
+        { bundle_id: 'com.fitness.app', name: 'Fit Pro', category_id: 5 }, // Health
+    ];
+    const insertedApps = await db.insert(schema.apps).values(appsData.map(app => ({
+        ...app,
+        status: Status.ACTIVE,
+    }))).returning();
+    console.log(`  Inserted ${insertedApps.length} test apps`);
+
+    // Insert Test Slots
+    const slotsData = [];
+    for (const app of insertedApps) {
+        // Add multiple slots per app
+        slotsData.push(
+            { app_id: app.id, slot_type: 1, width: 320, height: 50, description: 'Banner 320x50' },
+            { app_id: app.id, slot_type: 1, width: 300, height: 250, description: 'Banner 300x250' },
+            { app_id: app.id, slot_type: 2, width: 300, height: 250, description: 'Native Ad' },
+            { app_id: app.id, slot_type: 3, width: 1280, height: 720, description: 'Video Ad' },
+            { app_id: app.id, slot_type: 4, width: 320, height: 480, description: 'Interstitial Ad' },
+        );
+    }
+    await db.insert(schema.slots).values(slotsData.map(slot => ({
+        ...slot,
+        status: Status.ACTIVE,
+    })));
+    console.log(`  Inserted ${slotsData.length} ad slots`);
+
+    // 4. Creatives - covering all CreativeTypes (BANNER=1, NATIVE=2, VIDEO=3, INTERSTITIAL=4)
     // Campaign indices: 0:MOBA, 1:RPG, 2:MidYear, 3:BlackFri, 4:Invest, 5:GoldCard, 6:Coding, 7:Food, 8:Ride, 9:FPS
     const mockCreatives = [
         // MOBA Campaign (idx 0) - BANNER + VIDEO
@@ -596,7 +650,43 @@ async function initDatabase() {
 
     console.log(`  Inserted ${mockCreatives.length} creatives`);
 
-    // 4. Targeting Rules
+    // 5. Insert Creative Renditions (multi-size variants for each creative)
+    console.log('\nInserting creative renditions...');
+    const renditionsData = [];
+    for (const creative of insertedCreatives) {
+        // Add multiple renditions per creative
+        if (creative.creative_type === 1) { // Banner
+            renditionsData.push(
+                { creative_id: creative.id, slot_type: 1, width: 320, height: 50, file_url: BANNER_URLS['320x50'] },
+                { creative_id: creative.id, slot_type: 1, width: 300, height: 250, file_url: BANNER_URLS['300x250'] },
+                { creative_id: creative.id, slot_type: 1, width: 728, height: 90, file_url: BANNER_URLS['728x90'] },
+                { creative_id: creative.id, slot_type: 1, width: 300, height: 600, file_url: BANNER_URLS['300x600'] },
+            );
+        } else if (creative.creative_type === 3) { // Video
+            renditionsData.push(
+                { creative_id: creative.id, slot_type: 3, width: 1280, height: 720, file_url: VIDEO_URL, duration: creative.duration },
+                { creative_id: creative.id, slot_type: 3, width: 640, height: 360, file_url: VIDEO_URL, duration: creative.duration },
+            );
+        } else if (creative.creative_type === 4) { // Interstitial
+            renditionsData.push(
+                { creative_id: creative.id, slot_type: 4, width: 320, height: 480, file_url: BANNER_URLS['320x480'] },
+                { creative_id: creative.id, slot_type: 4, width: 480, height: 320, file_url: BANNER_URLS['320x480'] },
+            );
+        } else { // Native
+            renditionsData.push(
+                { creative_id: creative.id, slot_type: 2, width: 300, height: 250, file_url: BANNER_URLS['300x250'] },
+                { creative_id: creative.id, slot_type: 2, width: 200, height: 200, file_url: BANNER_URLS['300x250'] },
+                { creative_id: creative.id, slot_type: 2, width: 320, height: 50, file_url: BANNER_URLS['320x50'] },
+            );
+        }
+    }
+    await db.insert(schema.creative_renditions).values(renditionsData.map(r => ({
+        ...r,
+        status: Status.ACTIVE,
+    })));
+    console.log(`  Inserted ${renditionsData.length} creative renditions`);
+
+    // 6. Targeting Rules
     const rulesData = [
         { cIdx: 0, type: 'device', value: { os: ["android", "ios"] } },
         { cIdx: 0, type: 'geo', value: { countries: ["US", "CA", "UK"] } },
@@ -616,89 +706,6 @@ async function initDatabase() {
     })));
 
     console.log(`  Inserted ${rulesData.length} targeting rules`);
-
-    // 4. Supply Side test data: IAB Categories, Apps, Slots
-    console.log('\nInserting supply side test data...');
-
-    // Insert IAB Categories
-    const iabCategories = [
-        { code: 'IAB1', name: 'Arts & Entertainment', description: 'Movies, music, games, books' },
-        { code: 'IAB2', name: 'Automotive', description: 'Cars, trucks, motorcycles, auto parts' },
-        { code: 'IAB3', name: 'Business', description: 'Finance, marketing, human resources' },
-        { code: 'IAB4', name: 'Education', description: 'Colleges, online courses, textbooks' },
-        { code: 'IAB5', name: 'Health & Fitness', description: 'Diet, exercise, medical advice' },
-        { code: 'IAB6', name: 'Technology & Computing', description: 'Software, hardware, consumer electronics' },
-    ];
-    await db.insert(schema.app_categories).values(iabCategories.map(cat => ({
-        ...cat,
-        status: Status.ACTIVE,
-    })));
-    console.log(`  Inserted ${iabCategories.length} IAB categories`);
-
-    // Insert Test Apps
-    const appsData = [
-        { bundle_id: 'com.game.moba', name: 'MOBA Legends', category_id: 1 }, // Entertainment
-        { bundle_id: 'com.shop.ecommerce', name: 'Super Shop', category_id: 3 }, // Business
-        { bundle_id: 'com.social.media', name: 'Social Connect', category_id: 1 }, // Entertainment
-        { bundle_id: 'com.news.daily', name: 'Daily News', category_id: 6 }, // Technology
-        { bundle_id: 'com.fitness.app', name: 'Fit Pro', category_id: 5 }, // Health
-    ];
-    const insertedApps = await db.insert(schema.apps).values(appsData.map(app => ({
-        ...app,
-        status: Status.ACTIVE,
-    }))).returning();
-    console.log(`  Inserted ${insertedApps.length} test apps`);
-
-    // Insert Test Slots
-    const slotsData = [];
-    for (const app of insertedApps) {
-        // Add multiple slots per app
-        slotsData.push(
-            { app_id: app.id, slot_type: 1, width: 320, height: 50, description: 'Banner 320x50' },
-            { app_id: app.id, slot_type: 1, width: 300, height: 250, description: 'Banner 300x250' },
-            { app_id: app.id, slot_type: 2, width: 300, height: 250, description: 'Native Ad' },
-            { app_id: app.id, slot_type: 3, width: 1280, height: 720, description: 'Video Ad' },
-            { app_id: app.id, slot_type: 4, width: 320, height: 480, description: 'Interstitial Ad' },
-        );
-    }
-    await db.insert(schema.slots).values(slotsData.map(slot => ({
-        ...slot,
-        status: Status.ACTIVE,
-    })));
-    console.log(`  Inserted ${slotsData.length} ad slots`);
-
-    // Insert Creative Renditions (multi-size variants for each creative)
-    console.log('\nInserting creative renditions...');
-    const renditionsData = [];
-    for (const creative of insertedCreatives) {
-        // Add multiple renditions per creative
-        if (creative.creative_type === 1) { // Banner
-            renditionsData.push(
-                { creative_id: creative.id, slot_type: 1, width: 320, height: 50, file_url: `https://via.placeholder.com/320x50` },
-                { creative_id: creative.id, slot_type: 1, width: 300, height: 250, file_url: `https://via.placeholder.com/300x250` },
-                { creative_id: creative.id, slot_type: 1, width: 728, height: 90, file_url: `https://via.placeholder.com/728x90` },
-            );
-        } else if (creative.creative_type === 3) { // Video
-            renditionsData.push(
-                { creative_id: creative.id, slot_type: 3, width: 1280, height: 720, file_url: VIDEO_URL, duration: creative.duration },
-                { creative_id: creative.id, slot_type: 3, width: 640, height: 360, file_url: VIDEO_URL, duration: creative.duration },
-            );
-        } else if (creative.creative_type === 4) { // Interstitial
-            renditionsData.push(
-                { creative_id: creative.id, slot_type: 4, width: 320, height: 480, file_url: `https://via.placeholder.com/320x480` },
-                { creative_id: creative.id, slot_type: 4, width: 480, height: 320, file_url: `https://via.placeholder.com/480x320` },
-            );
-        } else { // Native
-            renditionsData.push(
-                { creative_id: creative.id, slot_type: 2, width: 300, height: 250, file_url: `https://via.placeholder.com/300x250` },
-            );
-        }
-    }
-    await db.insert(schema.creative_renditions).values(renditionsData.map(r => ({
-        ...r,
-        status: Status.ACTIVE,
-    })));
-    console.log(`  Inserted ${renditionsData.length} creative renditions`);
 
     // 5. Optional: GEO Knowledge seeding (requires Milvus + LLM API)
     console.log('\nChecking GEO knowledge prerequisites...');
