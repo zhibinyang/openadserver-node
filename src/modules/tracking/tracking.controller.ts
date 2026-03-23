@@ -48,7 +48,6 @@ export class TrackingController {
                 click_id: clickId,
                 cid,
                 crid,
-                cost: cost || '0', // Only CPC campaigns will have non-zero cost mapped here
             }).catch(err => console.error('Click tracking failed:', err));
         }
 

@@ -36,7 +36,7 @@ export class TrackingService {
         let creativeId: number = 0;
         let userId: string | undefined;
         const impId = dto.imp_id;
-        const clickId = dto.click_id || impId; // imp_id and click_id are same value when both present
+        let clickId = dto.click_id || impId; // imp_id and click_id are same value when both present
         let trackingIdValid = false;
 
         // Extract basic IDs from URL params (used for event reporting)
@@ -48,7 +48,7 @@ export class TrackingService {
         if (impId) {
             // Check if imp_id exists
             const impExists = await this.redisService.exists(`imp:${impId}`);
-            trackingIdValid = impExists > 0;
+            trackingIdValid = impExists;
 
             // Handle impression event: mark imp_id as existing
             if (dto.type === TrackingType.IMP) {
@@ -80,7 +80,7 @@ export class TrackingService {
         else if (dto.click_id) {
             // Check if click_id exists
             const clickExists = await this.redisService.exists(`click:${dto.click_id}`);
-            trackingIdValid = clickExists > 0;
+            trackingIdValid = clickExists;
 
             // For backward compatibility: if this is an impression on old URL, store click_id
             if (dto.type === TrackingType.IMP) {
@@ -95,7 +95,6 @@ export class TrackingService {
             campaignId = parseInt(dto.cid, 10);
             creativeId = parseInt(dto.crid, 10);
             userId = dto.uid || '';
-            requestId = randomUUID();
             clickId = undefined;
 
             this.logger.log(`Tracking via legacy method: campaign ${campaignId}, creative ${creativeId}`);
@@ -120,7 +119,7 @@ export class TrackingService {
             // If only click_id is provided, ensure it exists
             if (!impId && dto.click_id && !valid) {
                 const clickExists = await this.redisService.exists(`click:${dto.click_id}`);
-                valid = clickExists > 0;
+                valid = clickExists;
                 id = dto.click_id;
             }
 

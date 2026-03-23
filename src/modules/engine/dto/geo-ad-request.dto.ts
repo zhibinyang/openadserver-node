@@ -7,8 +7,7 @@ export class GeoAdRequestDto {
     query: string; // The search query
 
     @IsString()
-    @IsOptional()
-    slot_id?: string;
+    slot_id: string;
 
     @IsString()
     @IsOptional()

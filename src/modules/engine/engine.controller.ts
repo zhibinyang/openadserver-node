@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Get, Query, Req, Res, BadRequestException, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Req, Res, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { AdEngine } from './ad-engine.service';
 import { AdRequestDto } from './dto/ad-request.dto';
 import { GeoAdRequestDto } from './dto/geo-ad-request.dto';
@@ -36,6 +36,21 @@ export class EngineController {
         private readonly redisUserService: RedisUserService,
         private readonly eventProducer: EventProducerService,
     ) { }
+
+    /**
+     * Validate slot_id exists and is active, return slot info
+     */
+    private validateSlotId(slotIdStr: string) {
+        const slotId = parseInt(slotIdStr, 10);
+        if (isNaN(slotId)) {
+            throw new NotFoundException('Invalid slot_id format');
+        }
+        const slot = this.cacheService.getSlot(slotId);
+        if (!slot) {
+            throw new NotFoundException('Slot not found or inactive');
+        }
+        return slot;
+    }
 
     /**
      * Convert shared CreativeType to event CreativeType enum
@@ -178,9 +193,16 @@ export class EngineController {
 
     @Post('get')
     async getAd(@Body() body: AdRequestDto, @Req() req: FastifyRequest): Promise<any> {
-        if (!body.slot_type) {
-            throw new BadRequestException('slot_type is required for /ad/get');
-        }
+        // Validate slot_id exists and is active
+        const slot = this.validateSlotId(body.slot_id);
+
+        // Override slot_type with database value (required by rule)
+        body.slot_type = slot.slot_type ?? undefined;
+
+        // Other parameters: request value takes priority over database value
+        if (!body.slot_width) body.slot_width = slot.width ?? undefined;
+        if (!body.slot_height) body.slot_height = slot.height ?? undefined;
+
         const requestId = randomUUID();
         const context = await this.buildContext(body, req);
         const candidates = await this.adEngine.recommend(context, body.slot_id);
@@ -209,9 +231,13 @@ export class EngineController {
         @Req() req: FastifyRequest,
         @Res() res: FastifyReply
     ): Promise<void> {
+        // Validate slot_id exists and is active
+        const slot = this.validateSlotId(query.slot_id);
+
+        // VAST = always VIDEO type, override database value if needed
         const requestId = randomUUID();
         const context = await this.buildContext(query, req);
-        context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
+        context.slot_type = CreativeType.VIDEO;
         const candidates = await this.adEngine.recommend(context, query.slot_id);
 
         // Log winning campaign's current budget and spend asynchronously
@@ -240,6 +266,16 @@ export class EngineController {
         @Req() req: FastifyRequest,
         @Res() res: FastifyReply
     ): Promise<void> {
+        // Validate slot_id exists and is active
+        const slot = this.validateSlotId(body.slot_id);
+
+        // Override slot_type with database value (required by rule)
+        body.slot_type = slot.slot_type ?? undefined;
+
+        // Other parameters: request value takes priority over database value
+        if (!body.slot_width) body.slot_width = slot.width ?? undefined;
+        if (!body.slot_height) body.slot_height = slot.height ?? undefined;
+
         const requestId = randomUUID();
         const context = await this.buildContext(body, req);
         context.slot_type = CreativeType.VIDEO; // VAST = always VIDEO
@@ -509,6 +545,16 @@ export class EngineController {
         if (!body.query) {
             throw new BadRequestException('query is required for /ad/geo');
         }
+
+        // Validate slot_id exists and is active
+        const slot = this.validateSlotId(body.slot_id);
+
+        // Override slot_type with database value (required by rule)
+        (body as any).slot_type = slot.slot_type ?? undefined;
+
+        // Other parameters: request value takes priority over database value
+        if (!(body as any).slot_width) (body as any).slot_width = slot.width ?? undefined;
+        if (!(body as any).slot_height) (body as any).slot_height = slot.height ?? undefined;
 
         const requestId = randomUUID();
         const context = await this.buildContext(body as any, req);
